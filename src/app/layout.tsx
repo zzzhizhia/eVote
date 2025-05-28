@@ -25,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark"> {/* Default to dark theme as per preference */}
+    <html lang="en"> {/* Default to light theme */}
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AppShell>
           {children}
