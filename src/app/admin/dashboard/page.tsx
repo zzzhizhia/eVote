@@ -1,17 +1,24 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from "@/hooks/use-toast";
 
 const RESULTS_VISIBILITY_KEY = 'eVote_isResultsPublic';
+const HOME_PAGE_INTRO_TEXT_KEY = 'eVote_homePageIntroText';
+const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText';
+
+const DEFAULT_HOME_INTRO = "We are pleased to announce that the next presidential election will be held soon. This is your opportunity to choose the leader who will best represent your interests. Prepare to learn about the candidates and make an informed decision.";
+const DEFAULT_VOTE_INTRO = "Review the candidates below and make your selection. Click on a candidate's card to select them, then submit your vote.";
+
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -20,6 +27,11 @@ export default function AdminDashboardPage() {
   const [isResultsPublic, setIsResultsPublic] = useState(false);
   const [isLoadingVisibility, setIsLoadingVisibility] = useState(true);
 
+  const [homeIntroText, setHomeIntroText] = useState('');
+  const [voteIntroText, setVoteIntroText] = useState('');
+  const [isLoadingHomeIntro, setIsLoadingHomeIntro] = useState(true);
+  const [isLoadingVoteIntro, setIsLoadingVoteIntro] = useState(true);
+
   useEffect(() => {
     const authStatus = localStorage.getItem('isAdminAuthenticated') === 'true';
     setIsAdminAuthenticated(authStatus);
@@ -27,18 +39,18 @@ export default function AdminDashboardPage() {
       router.push('/admin');
     }
 
+    // Load results visibility
     try {
       const storedVisibility = localStorage.getItem(RESULTS_VISIBILITY_KEY);
       if (storedVisibility !== null) {
         setIsResultsPublic(JSON.parse(storedVisibility));
       } else {
-        // Default to private if not set
         setIsResultsPublic(false);
         localStorage.setItem(RESULTS_VISIBILITY_KEY, JSON.stringify(false));
       }
     } catch (error) {
       console.error("Error reading results visibility from localStorage:", error);
-      setIsResultsPublic(false); // Default to false on error
+      setIsResultsPublic(false);
        toast({
         title: "Error Loading Settings",
         description: "Could not load results visibility setting. Defaulting to private.",
@@ -46,6 +58,37 @@ export default function AdminDashboardPage() {
       });
     }
     setIsLoadingVisibility(false);
+
+    // Load Home page intro text
+    try {
+      const storedHomeIntro = localStorage.getItem(HOME_PAGE_INTRO_TEXT_KEY);
+      setHomeIntroText(storedHomeIntro || ''); // Keep empty if not set, so placeholder shows in textarea
+    } catch (error) {
+      console.error("Error reading home intro text from localStorage:", error);
+      setHomeIntroText('');
+      toast({
+        title: "Error Loading Home Intro",
+        description: "Could not load home page introductory text.",
+        variant: "destructive",
+      });
+    }
+    setIsLoadingHomeIntro(false);
+
+    // Load Vote page intro text
+    try {
+      const storedVoteIntro = localStorage.getItem(VOTE_PAGE_INTRO_TEXT_KEY);
+      setVoteIntroText(storedVoteIntro || ''); // Keep empty if not set
+    } catch (error) {
+      console.error("Error reading vote intro text from localStorage:", error);
+      setVoteIntroText('');
+      toast({
+        title: "Error Loading Vote Intro",
+        description: "Could not load vote page introductory text.",
+        variant: "destructive",
+      });
+    }
+    setIsLoadingVoteIntro(false);
+
   }, [router, toast]);
 
   const handleResultsVisibilityToggle = (checked: boolean) => {
@@ -61,6 +104,40 @@ export default function AdminDashboardPage() {
        toast({
         title: "Error Saving Settings",
         description: "Could not save results visibility setting.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSaveHomeIntro = () => {
+    try {
+      localStorage.setItem(HOME_PAGE_INTRO_TEXT_KEY, homeIntroText);
+      toast({
+        title: "Home Page Intro Saved",
+        description: "The introductory text for the home page has been updated.",
+      });
+    } catch (error) {
+      console.error("Error saving home intro text to localStorage:", error);
+      toast({
+        title: "Error Saving Home Intro",
+        description: "Could not save home page introductory text.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSaveVoteIntro = () => {
+    try {
+      localStorage.setItem(VOTE_PAGE_INTRO_TEXT_KEY, voteIntroText);
+      toast({
+        title: "Vote Page Intro Saved",
+        description: "The introductory text for the vote page has been updated.",
+      });
+    } catch (error) {
+      console.error("Error saving vote intro text to localStorage:", error);
+      toast({
+        title: "Error Saving Vote Intro",
+        description: "Could not save vote page introductory text.",
         variant: "destructive",
       });
     }
@@ -99,7 +176,7 @@ export default function AdminDashboardPage() {
             </Link>
           </Button>
 
-          <Card className="w-full max-w-xs shadow-md">
+          <Card className="w-full max-w-md shadow-md">
             <CardHeader>
               <CardTitle className="text-xl text-center">Results Visibility</CardTitle>
             </CardHeader>
@@ -125,13 +202,65 @@ export default function AdminDashboardPage() {
               <p>Controls whether non-admin users can view poll results.</p>
             </CardFooter>
           </Card>
+
+          {/* Edit Home Page Intro */}
+          <Card className="w-full max-w-md shadow-md">
+            <CardHeader>
+              <CardTitle className="text-xl text-center flex items-center justify-center gap-2">
+                <PencilLine className="h-5 w-5" /> Edit Home Page Introduction
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 py-4">
+              <Label htmlFor="homeIntroText">Introductory Text</Label>
+              {isLoadingHomeIntro ? (
+                 <p className="text-sm text-muted-foreground">Loading text...</p>
+              ) : (
+                <Textarea
+                  id="homeIntroText"
+                  value={homeIntroText}
+                  onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setHomeIntroText(e.target.value)}
+                  placeholder={DEFAULT_HOME_INTRO}
+                  rows={5}
+                  className="text-sm"
+                />
+              )}
+            </CardContent>
+            <CardFooter className="border-t pt-4">
+              <Button onClick={handleSaveHomeIntro} className="w-full" disabled={isLoadingHomeIntro}>
+                <Save className="mr-2 h-4 w-4" /> Save Home Intro
+              </Button>
+            </CardFooter>
+          </Card>
+
+          {/* Edit Vote Page Intro */}
+          <Card className="w-full max-w-md shadow-md">
+            <CardHeader>
+              <CardTitle className="text-xl text-center flex items-center justify-center gap-2">
+                <PencilLine className="h-5 w-5" /> Edit Vote Page Introduction
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 py-4">
+              <Label htmlFor="voteIntroText">Introductory Text</Label>
+              {isLoadingVoteIntro ? (
+                <p className="text-sm text-muted-foreground">Loading text...</p>
+              ): (
+                <Textarea
+                  id="voteIntroText"
+                  value={voteIntroText}
+                  onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setVoteIntroText(e.target.value)}
+                  placeholder={DEFAULT_VOTE_INTRO}
+                  rows={4}
+                  className="text-sm"
+                />
+              )}
+            </CardContent>
+            <CardFooter className="border-t pt-4">
+              <Button onClick={handleSaveVoteIntro} className="w-full" disabled={isLoadingVoteIntro}>
+                <Save className="mr-2 h-4 w-4" /> Save Vote Intro
+              </Button>
+            </CardFooter>
+          </Card>
           
-          {/* 
-          <Button variant="outline" size="lg" className="w-full max-w-xs shadow-md hover:shadow-lg transition-shadow">
-            <ListChecks className="mr-2 h-5 w-5" />
-            View Existing Polls (Coming Soon)
-          </Button>
-          */}
         </CardContent>
       </Card>
     </div>

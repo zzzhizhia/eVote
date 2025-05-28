@@ -11,27 +11,43 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const POLLS_STORAGE_KEY = 'eVote_polls_list';
+const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText';
+const DEFAULT_VOTE_INTRO = "Review the candidates below and make your selection. Click on a candidate's card to select them, then submit your vote.";
 
 export default function VotePage() {
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [introText, setIntroText] = useState(DEFAULT_VOTE_INTRO);
   const router = useRouter();
   const { toast } = useToast();
 
   useEffect(() => {
+    // Load intro text
+    try {
+      const storedIntro = localStorage.getItem(VOTE_PAGE_INTRO_TEXT_KEY);
+      if (storedIntro && storedIntro.trim() !== "") {
+        setIntroText(storedIntro);
+      } else {
+        setIntroText(DEFAULT_VOTE_INTRO); // Fallback to default
+      }
+    } catch (error) {
+      console.error("Error loading vote page intro from localStorage:", error);
+      setIntroText(DEFAULT_VOTE_INTRO); // Fallback on error
+    }
+
+    // Load poll data
     try {
       const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
       if (storedPollsRaw) {
         const storedPolls: Poll[] = JSON.parse(storedPollsRaw);
         if (storedPolls.length > 0) {
-          // Use the latest poll (last in the array)
           setActivePoll(storedPolls[storedPolls.length - 1]);
         } else {
-          setActivePoll(null); // No polls available
+          setActivePoll(null);
         }
       } else {
-        setActivePoll(null); // No polls key found
+        setActivePoll(null);
       }
     } catch (error) {
       console.error("Error loading polls from localStorage:", error);
@@ -74,7 +90,6 @@ export default function VotePage() {
         return;
       }
 
-      // Update votes for the specific candidate in the specific poll
       const updatedPoll = { ...allPolls[pollIndex] };
       if (!updatedPoll.votes) {
         updatedPoll.votes = {};
@@ -105,7 +120,6 @@ export default function VotePage() {
     return (
       <div className="text-center py-10">
         <p className="text-lg text-muted-foreground">Loading poll data...</p>
-        {/* Consider adding Skeleton loaders here for better UX */}
       </div>
     );
   }
@@ -131,13 +145,15 @@ export default function VotePage() {
   }
 
   return (
-    <div className="flex flex-col items-center space-y-10 py-8">
-      <h1 className="text-4xl font-bold tracking-tight text-center text-primary">
-        {activePoll.title}
-      </h1>
-      <p className="text-lg text-muted-foreground text-center max-w-2xl">
-        Review the candidates below and make your selection. Click on a candidate's card to select them, then submit your vote.
-      </p>
+    <div className="flex flex-col items-center space-y-8 py-8"> {/* Reduced top space to y-8 from y-10 */}
+      <div className="text-center space-y-3"> {/* Grouped title and intro text */}
+        <h1 className="text-4xl font-bold tracking-tight text-primary">
+          {activePoll.title}
+        </h1>
+        <p className="text-lg text-muted-foreground max-w-2xl whitespace-pre-line">
+          {introText}
+        </p>
+      </div>
       
       {activePoll.candidates.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8 w-full">
@@ -159,7 +175,7 @@ export default function VotePage() {
           size="lg" 
           onClick={handleSubmitVote} 
           disabled={!selectedCandidateId}
-          className="mt-8 shadow-lg hover:shadow-xl transition-shadow min-w-[200px]"
+          className="mt-6 shadow-lg hover:shadow-xl transition-shadow min-w-[200px]" // Reduced margin top
         >
           <Send className="mr-2 h-5 w-5" />
           Submit Your Vote
