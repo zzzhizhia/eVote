@@ -1,12 +1,13 @@
+
 'use client';
 
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent, useRef, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, ListPlus } from 'lucide-react';
+import { PlusCircle, Trash2, ListPlus, UploadCloud } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll, PollCandidate } from '@/lib/types';
 import Image from 'next/image';
@@ -19,8 +20,11 @@ export default function CreatePollPage() {
 
   const [pollTitle, setPollTitle] = useState('');
   const [currentCandidateName, setCurrentCandidateName] = useState('');
+  const [currentCandidateAvatarFile, setCurrentCandidateAvatarFile] = useState<File | null>(null);
+  const [currentCandidateAvatarPreview, setCurrentCandidateAvatarPreview] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<PollCandidate[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const isAuthenticated = localStorage.getItem('isAdminAuthenticated') === 'true';
@@ -29,7 +33,22 @@ export default function CreatePollPage() {
     }
   }, [router]);
 
-  const handleAddCandidate = () => {
+  const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setCurrentCandidateAvatarFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCurrentCandidateAvatarPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setCurrentCandidateAvatarFile(null);
+      setCurrentCandidateAvatarPreview(null);
+    }
+  };
+
+  const handleAddCandidate = async () => {
     if (!currentCandidateName.trim()) {
       toast({
         title: "Candidate Name Empty",
@@ -38,14 +57,43 @@ export default function CreatePollPage() {
       });
       return;
     }
+
+    let avatarUrl = 'https://placehold.co/150x150.png'; // Default placeholder
+    let dataAiHint = 'person placeholder'; // Generic hint for placeholder
+
+    if (currentCandidateAvatarFile) {
+      try {
+        avatarUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(currentCandidateAvatarFile);
+        });
+        dataAiHint = 'uploaded avatar'; // Hint for uploaded image
+      } catch (error) {
+        console.error("Error reading avatar file:", error);
+        toast({
+          title: "Avatar Upload Error",
+          description: "Could not process the avatar image. Using default.",
+          variant: "destructive",
+        });
+        // Keep default avatarUrl and dataAiHint
+      }
+    }
+
     const newCandidate: PollCandidate = {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
       name: currentCandidateName.trim(),
-      avatarUrl: 'https://placehold.co/150x150.png', // Default placeholder
-      dataAiHint: 'person', // Generic hint
+      avatarUrl,
+      dataAiHint,
     };
     setCandidates(prev => [...prev, newCandidate]);
     setCurrentCandidateName('');
+    setCurrentCandidateAvatarFile(null);
+    setCurrentCandidateAvatarPreview(null);
+    if (avatarInputRef.current) {
+      avatarInputRef.current.value = ''; // Reset file input
+    }
   };
 
   const handleRemoveCandidate = (candidateId: string) => {
@@ -127,14 +175,14 @@ export default function CreatePollPage() {
             </div>
 
             <div className="space-y-4">
-              <Label className="text-base">Candidates</Label>
+              <Label className="text-base font-medium">Candidates</Label>
               {candidates.length > 0 && (
-                <div className="space-y-3 max-h-60 overflow-y-auto p-1 rounded-md border">
+                <div className="space-y-3 max-h-60 overflow-y-auto p-2 rounded-md border">
                   {candidates.map((candidate) => (
-                    <div key={candidate.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
-                      <div className="flex items-center gap-2">
-                        <Image src={candidate.avatarUrl} alt={candidate.name} width={32} height={32} className="rounded-full" data-ai-hint={candidate.dataAiHint} />
-                        <span className="text-sm">{candidate.name}</span>
+                    <div key={candidate.id} className="flex items-center justify-between p-2.5 bg-muted/50 rounded-md shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <Image src={candidate.avatarUrl} alt={candidate.name} width={40} height={40} className="rounded-full object-cover" data-ai-hint={candidate.dataAiHint} />
+                        <span className="text-sm font-medium">{candidate.name}</span>
                       </div>
                       <Button
                         type="button"
@@ -142,7 +190,7 @@ export default function CreatePollPage() {
                         size="icon"
                         onClick={() => handleRemoveCandidate(candidate.id)}
                         aria-label={`Remove ${candidate.name}`}
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -150,27 +198,46 @@ export default function CreatePollPage() {
                   ))}
                 </div>
               )}
-              <div className="flex items-end gap-2">
-                <div className="flex-grow space-y-1">
-                  <Label htmlFor="candidateName" className="text-sm sr-only">Candidate Name</Label>
-                  <Input
-                    id="candidateName"
-                    type="text"
-                    value={currentCandidateName}
-                    onChange={(e) => setCurrentCandidateName(e.target.value)}
-                    placeholder="Enter candidate name"
-                    className="text-sm"
-                  />
+              
+              <div className="p-4 border rounded-lg space-y-3 shadow-sm bg-card">
+                 <Label htmlFor="candidateName" className="text-sm font-medium">Add New Candidate</Label>
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                  <div className="flex-grow space-y-1">
+                    <Label htmlFor="candidateNameInput" className="text-xs text-muted-foreground">Name</Label>
+                    <Input
+                      id="candidateNameInput"
+                      type="text"
+                      value={currentCandidateName}
+                      onChange={(e) => setCurrentCandidateName(e.target.value)}
+                      placeholder="Enter candidate name"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                     <Label htmlFor="candidateAvatar" className="text-xs text-muted-foreground">Avatar (Optional)</Label>
+                    <Input
+                      id="candidateAvatar"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarChange}
+                      ref={avatarInputRef}
+                      className="text-sm file:mr-2 file:py-1.5 file:px-2 file:rounded-full file:border-0 file:text-xs file:bg-muted file:text-muted-foreground hover:file:bg-primary/10"
+                    />
+                  </div>
+                  {currentCandidateAvatarPreview && (
+                    <Image src={currentCandidateAvatarPreview} alt="Avatar preview" width={40} height={40} className="rounded-full object-cover self-center sm:self-end" data-ai-hint="avatar preview" />
+                  )}
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleAddCandidate}
-                  className="shadow-sm"
-                >
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add Candidate
-                </Button>
+                 <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddCandidate}
+                    className="w-full sm:w-auto shadow-sm"
+                    disabled={!currentCandidateName.trim()}
+                  >
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Add Candidate to Poll
+                  </Button>
               </div>
                {candidates.length === 0 && <p className="text-sm text-muted-foreground text-center pt-2">Add at least two candidates for the poll.</p>}
             </div>
@@ -184,4 +251,5 @@ export default function CreatePollPage() {
       </Card>
     </div>
   );
-}
+
+    
