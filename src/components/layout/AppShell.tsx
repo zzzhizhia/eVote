@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import Header from './Header';
-import Footer from './Footer';
+// import Footer from './Footer'; // Footer import removed
 
 interface AppShellProps {
   children: ReactNode;
@@ -13,7 +13,7 @@ export default function AppShell({ children }: AppShellProps) {
       <main className="flex-grow container mx-auto px-4 py-8">
         {children}
       </main>
-      <Footer />
+      {/* <Footer /> Footer component rendering removed */}
     </div>
   );
 }
