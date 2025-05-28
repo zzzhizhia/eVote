@@ -1,3 +1,4 @@
+
 export interface Candidate {
   id: string;
   name: string;
@@ -25,4 +26,7 @@ export interface Poll {
   title: string;
   candidates: PollCandidate[];
   votes: { [candidateId: string]: number }; // Stores vote counts for this poll
+  isOpen: boolean; // true if poll is open for voting, false otherwise
+  scheduledCloseTime?: string | null; // ISO string for scheduled closing time
 }
+

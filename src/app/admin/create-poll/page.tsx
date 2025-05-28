@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, ListPlus } from 'lucide-react';
+import { PlusCircle, Trash2, ListPlus, CalendarClock } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll, PollCandidate } from '@/lib/types';
 import Image from 'next/image';
@@ -23,6 +23,7 @@ export default function CreatePollPage() {
   const [currentCandidateAvatarFile, setCurrentCandidateAvatarFile] = useState<File | null>(null);
   const [currentCandidateAvatarPreview, setCurrentCandidateAvatarPreview] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<PollCandidate[]>([]);
+  const [scheduledCloseTime, setScheduledCloseTime] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -77,7 +78,6 @@ export default function CreatePollPage() {
           description: "Could not process the avatar image. Using default.",
           variant: "destructive",
         });
-        // Keep default avatarUrl and dataAiHint
       }
     }
 
@@ -125,7 +125,9 @@ export default function CreatePollPage() {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
       title: pollTitle.trim(),
       candidates,
-      votes: {}, // Initialize votes object
+      votes: {},
+      isOpen: true, // Polls are open by default when created
+      scheduledCloseTime: scheduledCloseTime ? new Date(scheduledCloseTime).toISOString() : null,
     };
 
     try {
@@ -139,7 +141,8 @@ export default function CreatePollPage() {
       });
       setPollTitle('');
       setCandidates([]);
-      // Optionally, redirect: router.push('/admin/dashboard');
+      setScheduledCloseTime('');
+      router.push('/admin/dashboard');
     } catch (error) {
       console.error("Failed to save poll:", error);
       toast({
@@ -158,7 +161,7 @@ export default function CreatePollPage() {
         <CardHeader className="items-center text-center">
           <ListPlus className="h-12 w-12 text-primary mb-3" />
           <CardTitle className="text-3xl font-bold">Create New Poll</CardTitle>
-          <CardDescription className="text-lg">Define the title and candidates for your new poll.</CardDescription>
+          <CardDescription className="text-lg">Define the title, candidates, and settings for your new poll.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6 p-6">
@@ -174,6 +177,21 @@ export default function CreatePollPage() {
                 required
               />
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="scheduledCloseTime" className="text-base flex items-center gap-2">
+                <CalendarClock className="h-5 w-5" /> Optional: Schedule Close Time
+              </Label>
+              <Input
+                id="scheduledCloseTime"
+                type="datetime-local"
+                value={scheduledCloseTime}
+                onChange={(e) => setScheduledCloseTime(e.target.value)}
+                className="text-base"
+              />
+               <p className="text-xs text-muted-foreground">Leave blank if you want to close the poll manually.</p>
+            </div>
+
 
             <div className="space-y-4">
               <Label className="text-base font-medium">Candidates</Label>
@@ -252,3 +270,4 @@ export default function CreatePollPage() {
       </Card>
     </div>
   );
+}
