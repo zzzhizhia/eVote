@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation'; 
 import TickerTape from '@/components/results/TickerTape';
 import type { Poll, PollCandidate } from '@/lib/types';
@@ -39,7 +39,7 @@ const checkPollStatus = (poll: Poll): Poll => {
 };
 
 
-export default function ResultsPage() {
+function ResultsContent() {
   const router = useRouter();
   const searchParams = useSearchParams(); 
   const { t } = useLanguage();
@@ -48,7 +48,6 @@ export default function ResultsPage() {
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
   const [isLoading, setIsLoading] = useState(true); 
   const [canViewResults, setCanViewResults] = useState(false);
-  
   const targetPollId = searchParams.get('pollId');
 
   const fetchResultsVisibilityAndPolls = useCallback(async () => {
@@ -189,7 +188,7 @@ export default function ResultsPage() {
   const pollTitleForDisplay = activePoll ? activePoll.title : (allPolls.length > 0 ? t('resultsPage.noPollSelected') : t('resultsPage.noPollsAvailable'));
 
   return (
-    <div className="flex flex-col items-center space-y-8 py-8">
+    <div className="flex flex-col items-center space-y-8 py-8 px-4 md:px-0">
       <div className="w-full max-w-4xl flex flex-col sm:flex-row justify-between items-center gap-4 px-4 sm:px-0">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-center sm:text-left text-primary flex-grow">
           {activePoll ? t('resultsPage.pageTitle', { pollTitle: pollTitleForDisplay || '' }) : pollTitleForDisplay}
@@ -347,5 +346,14 @@ export default function ResultsPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-10"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="text-lg text-muted-foreground mt-4">Loading results...</p></div>}>
+      <ResultsContent />
+    </Suspense>
   );
 }
