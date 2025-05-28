@@ -1,3 +1,4 @@
+
 # eVote - Modern Electronic Voting Platform
 
 eVote is a full-stack electronic voting application built with Next.js, React, Tailwind CSS, and ShadCN UI. It allows administrators to create, manage, and customize polls, while users can easily cast their votes. The platform supports features like scheduled poll closing, vote limits per client, multi-select voting, and internationalization.
@@ -74,7 +75,39 @@ eVote is a full-stack electronic voting application built with Next.js, React, T
 
 4.  **Database Schema Setup**:
     *   The application includes a basic schema initialization function (`src/lib/server/db.ts`) that attempts to create necessary tables (`polls`, `candidates`, `app_settings`) and default settings if they don't exist. This is primarily for **development convenience** and runs when API routes are first hit in a development environment.
-    *   **For Production (e.g., when deploying to Vercel)**: It is **strongly recommended** to use a dedicated database migration tool (like Prisma Migrate, Drizzle Kit, Flyway, or Liquibase) or manually execute the SQL DDL statements found within the `initializeDbSchema` function in `src/lib/server/db.ts` to set up your database schema before deploying. The automatic schema creation is disabled in production environments.
+    *   **For Production (e.g., when deploying to Vercel)**: It is **strongly recommended** to use a dedicated database migration tool (like Prisma Migrate, Drizzle Kit, Flyway, or Liquibase) or manually execute the SQL DDL statements to set up your database schema before deploying. The automatic schema creation is disabled in production environments.
+    *   **Manual SQL DDL Execution**: If you choose to set up the schema manually (e.g., in Neon SQL Editor), execute the following SQL commands:
+        ```sql
+        CREATE TABLE IF NOT EXISTS polls (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          is_open BOOLEAN DEFAULT TRUE,
+          scheduled_close_time TIMESTAMPTZ,
+          vote_limit_enabled BOOLEAN DEFAULT FALSE,
+          max_votes_per_client INTEGER DEFAULT 1,
+          is_multi_select BOOLEAN DEFAULT FALSE,
+          max_selections INTEGER DEFAULT 1,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS candidates (
+          id TEXT PRIMARY KEY,
+          poll_id TEXT REFERENCES polls(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          avatar_url TEXT,
+          data_ai_hint TEXT,
+          votes INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT
+        );
+
+        INSERT INTO app_settings (key, value) VALUES ('resultsVisibility', 'false') ON CONFLICT (key) DO NOTHING;
+
+        INSERT INTO app_settings (key, value) VALUES ('customTexts', '{}') ON CONFLICT (key) DO NOTHING;
+        ```
 
 ### Running the Application
 
@@ -125,7 +158,7 @@ eVote is a full-stack electronic voting application built with Next.js, React, T
 1.  Push your code to a Git repository (GitHub, GitLab, Bitbucket).
 2.  Import your project into Vercel.
 3.  **Configure Environment Variables** in your Vercel project settings (Project > Settings > Environment Variables) with the same keys and values as in your `.env.local` file (`DATABASE_URL`, `ADMIN_PASSWORD`, `SESSION_SECRET`).
-4.  **Set up your production database schema** manually or using a migration tool before or during your first deployment.
+4.  **Set up your production database schema** manually or using a migration tool before or during your first deployment (see "Database Schema Setup" above).
 5.  Vercel will automatically build and deploy your application.
 
 ## 💡 Potential Future Enhancements

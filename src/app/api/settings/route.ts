@@ -15,14 +15,30 @@ export async function GET() {
     const resultsVisibilityRes = await db.query("SELECT value FROM app_settings WHERE key = 'resultsVisibility'");
     const customTextsRes = await db.query("SELECT value FROM app_settings WHERE key = 'customTexts'");
 
+    // Ensure rows exist before trying to access them
+    const resultsVisibilityValue = resultsVisibilityRes.rows[0]?.value;
+    const customTextsValue = customTextsRes.rows[0]?.value;
+
+    if (resultsVisibilityValue === undefined) {
+        console.warn("API GET /api/settings: 'resultsVisibility' key not found in app_settings table. Using default.");
+    }
+    if (customTextsValue === undefined) {
+        console.warn("API GET /api/settings: 'customTexts' key not found in app_settings table. Using default.");
+    }
+
     const settings = {
-      resultsVisibility: resultsVisibilityRes.rows[0]?.value === 'true',
-      customTexts: customTextsRes.rows[0]?.value ? JSON.parse(customTextsRes.rows[0].value) : {},
+      resultsVisibility: resultsVisibilityValue === 'true', // Default to false if undefined
+      customTexts: customTextsValue ? JSON.parse(customTextsValue) : {}, // Default to empty object if undefined
     };
     return NextResponse.json(settings);
   } catch (error) {
-    console.error('Error fetching settings:', error);
-    return NextResponse.json({ message: 'Error fetching settings' }, { status: 500 });
+    console.error('Error fetching settings in API /api/settings GET:', error);
+    // Log the specific error to Vercel logs
+    let errorMessage = 'Error fetching settings';
+    if (error instanceof Error) {
+        errorMessage = error.message;
+    }
+    return NextResponse.json({ message: 'Error fetching settings', error: errorMessage }, { status: 500 });
   }
 }
 
@@ -45,7 +61,12 @@ export async function PUT(request: NextRequest) {
     }
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error updating setting:', error);
-    return NextResponse.json({ message: 'Error updating setting' }, { status: 500 });
+    console.error('Error updating setting in API /api/settings PUT:', error);
+    // Log the specific error to Vercel logs
+    let errorMessage = 'Error updating setting';
+    if (error instanceof Error) {
+        errorMessage = error.message;
+    }
+    return NextResponse.json({ message: 'Error updating setting', error: errorMessage }, { status: 500 });
   }
 }
