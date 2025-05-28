@@ -1,6 +1,6 @@
 
 {
-  "header.eVote": "eVote电子投票",
+  "header.eVote": "eVote",
   "header.home": "首页",
   "header.vote": "投票",
   "header.results": "结果",
@@ -232,5 +232,3 @@
   "candidateCard.selectCandidateAriaLabel": "选择 {{candidateName}}",
   "candidateCard.disabledAriaLabel": "{{candidateName}} (投票已关闭、达到限制或已达最大选择数)"
 }
-
-    
