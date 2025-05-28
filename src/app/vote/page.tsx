@@ -11,10 +11,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext'; 
-import type { CustomTexts } from '@/app/api/custom-texts/route';
 
-const POLLS_STORAGE_KEY = 'eVote_polls_list'; // Polls remain in localStorage
-const CLIENT_POLL_VOTES_KEY = 'eVote_clientPollVotes'; // Client vote counts remain in localStorage
+const POLLS_STORAGE_KEY = 'eVote_polls_list'; 
+const CLIENT_POLL_VOTES_KEY = 'eVote_clientPollVotes'; 
+const getCustomTextKey = (baseKey: string, locale: string) => `eVote_${baseKey}_${locale}`;
 
 
 const checkAndUpdatePollStatusesClient = (polls: Poll[]): { updatedPolls: Poll[], wasChanged: boolean } => {
@@ -69,19 +69,12 @@ export default function VotePage() {
   const [allPolls, setAllPolls] = useState<Poll[]>([]);
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true); // For polls
-  const [isLoadingTexts, setIsLoadingTexts] = useState(true); // For custom texts
-  const [fetchedCustomTexts, setFetchedCustomTexts] = useState<CustomTexts | null>(null);
+  const [isLoading, setIsLoading] = useState(true); 
+  const [isLoadingTexts, setIsLoadingTexts] = useState(true); 
+  const [introText, setIntroText] = useState('');
   const [clientVotes, setClientVotes] = useState<{ [pollId: string]: number }>({});
   const router = useRouter();
   const { toast } = useToast();
-
-
-  const introText = useMemo(() => {
-    if (isLoadingTexts || !fetchedCustomTexts) return defaultVotePageIntro;
-    return fetchedCustomTexts[locale]?.votePageIntroText || defaultVotePageIntro;
-  }, [isLoadingTexts, fetchedCustomTexts, locale, defaultVotePageIntro]);
-
 
   const loadPollData = useCallback(() => {
     setIsLoading(true);
@@ -117,27 +110,22 @@ export default function VotePage() {
     setIsLoading(false);
   }, [toast, selectedPoll, t]); 
 
-  const fetchTexts = useCallback(async () => {
+  const loadVotePageTexts = useCallback(() => {
     setIsLoadingTexts(true);
     try {
-      const response = await fetch('/api/custom-texts');
-      if (!response.ok) {
-        throw new Error('Failed to fetch custom texts for vote page');
-      }
-      const data = await response.json();
-      setFetchedCustomTexts(data);
+      const storedIntro = localStorage.getItem(getCustomTextKey('votePageIntroText', locale));
+      setIntroText(storedIntro || defaultVotePageIntro);
     } catch (error) {
-      console.error("Error loading custom texts from API for vote page:", error);
-      setFetchedCustomTexts(null); 
+      console.error("Error loading vote page intro from localStorage:", error);
+      setIntroText(defaultVotePageIntro);
     }
     setIsLoadingTexts(false);
-  }, []);
+  }, [locale, defaultVotePageIntro]);
 
   useEffect(() => {
     loadPollData();
-    fetchTexts();
-  }, [loadPollData, fetchTexts]);
-
+    loadVotePageTexts();
+  }, [loadPollData, loadVotePageTexts]); // locale change is handled by loadVotePageTexts dependency on locale
 
   const handleSelectCandidate = (candidateId: string) => {
     if (!selectedPoll) return;

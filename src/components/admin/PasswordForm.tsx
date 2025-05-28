@@ -11,6 +11,10 @@ import { KeyRound, ShieldAlert } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from '@/contexts/LanguageContext';
 
+// For demo purposes, the password is hardcoded here.
+// In a real application, this should be handled securely, e.g., via environment variables and a backend check.
+const ACTUAL_ADMIN_PASSWORD = 'admin123'; // Default admin password
+
 export default function PasswordForm() {
   const { t } = useLanguage();
   const [password, setPassword] = useState('');
@@ -24,42 +28,25 @@ export default function PasswordForm() {
     setIsLoading(true);
     setError('');
 
-    try {
-      const response = await fetch('/api/admin-password');
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch admin password');
-      }
-      const data = await response.json();
-      const adminPasswordFromEdgeConfig = data.password;
+    // Simulate a short delay for a more realistic loading experience
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-      if (password === adminPasswordFromEdgeConfig) {
-        toast({
-          title: t('toast.accessGranted'),
-          description: t('toast.accessGrantedDescription'),
-        });
-        localStorage.setItem('isAdminAuthenticated', 'true'); // Session flag
-        router.push('/admin/dashboard');
-      } else {
-        setError(t('admin.login.invalidPasswordError'));
-        toast({
-          title: t('toast.accessDenied'),
-          description: t('toast.accessDeniedDescription'),
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      console.error("Password check failed:", err);
-      const errorMessage = err instanceof Error ? err.message : t('admin.login.invalidPasswordError');
-      setError(errorMessage);
+    if (password === ACTUAL_ADMIN_PASSWORD) {
+      toast({
+        title: t('toast.accessGranted'),
+        description: t('toast.accessGrantedDescription'),
+      });
+      localStorage.setItem('isAdminAuthenticated', 'true'); // Session flag
+      router.push('/admin/dashboard');
+    } else {
+      setError(t('admin.login.invalidPasswordError'));
       toast({
         title: t('toast.accessDenied'),
-        description: errorMessage,
+        description: t('toast.accessDeniedDescription'),
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   };
 
   return (

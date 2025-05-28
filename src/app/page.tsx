@@ -7,12 +7,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Megaphone, VoteIcon, Loader2 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
-import type { CustomTexts } from '@/app/api/custom-texts/route';
+
+const getCustomTextKey = (baseKey: string, locale: string) => `eVote_${baseKey}_${locale}`;
 
 export default function HomePage() {
   const { t, locale } = useLanguage();
   const [isLoadingTexts, setIsLoadingTexts] = useState(true);
-  const [fetchedCustomTexts, setFetchedCustomTexts] = useState<CustomTexts | null>(null);
+  
+  const [displayTitle, setDisplayTitle] = useState('');
+  const [displayDescription, setDisplayDescription] = useState('');
+  const [introParagraph, setIntroParagraph] = useState('');
 
   const defaultTexts = useMemo(() => ({
     title: t('home.title'),
@@ -20,40 +24,31 @@ export default function HomePage() {
     introParagraph: t('home.defaultIntro'),
   }), [t]);
 
-  const fetchTexts = useCallback(async () => {
+  const loadCustomTexts = useCallback(() => {
     setIsLoadingTexts(true);
     try {
-      const response = await fetch('/api/custom-texts');
-      if (!response.ok) {
-        throw new Error('Failed to fetch custom texts');
-      }
-      const data = await response.json();
-      setFetchedCustomTexts(data);
+      const storedTitle = localStorage.getItem(getCustomTextKey('homePageTitle', locale));
+      setDisplayTitle(storedTitle || defaultTexts.title);
+
+      const storedDescription = localStorage.getItem(getCustomTextKey('homePageDescription', locale));
+      setDisplayDescription(storedDescription || defaultTexts.description);
+      
+      const storedIntro = localStorage.getItem(getCustomTextKey('homePageIntroText', locale));
+      setIntroParagraph(storedIntro || defaultTexts.introParagraph);
+
     } catch (error) {
-      console.error("Error loading custom texts from API:", error);
-      setFetchedCustomTexts(null); // Fallback to defaults on error
+      console.error("Error loading custom texts from localStorage:", error);
+      // Fallback to defaults on error
+      setDisplayTitle(defaultTexts.title);
+      setDisplayDescription(defaultTexts.description);
+      setIntroParagraph(defaultTexts.introParagraph);
     }
     setIsLoadingTexts(false);
-  }, []);
+  }, [locale, defaultTexts]);
 
   useEffect(() => {
-    fetchTexts();
-  }, [fetchTexts]);
-
-  const displayTitle = useMemo(() => {
-    if (isLoadingTexts || !fetchedCustomTexts) return defaultTexts.title;
-    return fetchedCustomTexts[locale]?.homePageTitle || defaultTexts.title;
-  }, [isLoadingTexts, fetchedCustomTexts, locale, defaultTexts.title]);
-
-  const displayDescription = useMemo(() => {
-    if (isLoadingTexts || !fetchedCustomTexts) return defaultTexts.description;
-    return fetchedCustomTexts[locale]?.homePageDescription || defaultTexts.description;
-  }, [isLoadingTexts, fetchedCustomTexts, locale, defaultTexts.description]);
-
-  const introParagraph = useMemo(() => {
-    if (isLoadingTexts || !fetchedCustomTexts) return defaultTexts.introParagraph;
-    return fetchedCustomTexts[locale]?.homePageIntroText || defaultTexts.introParagraph;
-  }, [isLoadingTexts, fetchedCustomTexts, locale, defaultTexts.introParagraph]);
+    loadCustomTexts();
+  }, [loadCustomTexts]); // locale change is handled by loadCustomTexts dependency on locale
 
   if (isLoadingTexts) {
     return (

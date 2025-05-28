@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, type ChangeEvent, useCallback } from 'react';
+import { useEffect, useState, type ChangeEvent, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll } from '@/lib/types';
-import type { CustomTexts } from '@/app/api/custom-texts/route';
+// Removed CustomTexts import as we'll use individual localStorage items
 import { format, parseISO } from 'date-fns';
 import {
   AlertDialog,
@@ -28,7 +28,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useLanguage } from '@/contexts/LanguageContext';
 
-const POLLS_STORAGE_KEY = 'eVote_polls_list'; // Polls remain in localStorage for this iteration
+const POLLS_STORAGE_KEY = 'eVote_polls_list';
+const RESULTS_VISIBILITY_KEY = 'eVote_resultsPublic';
+const getCustomTextKey = (baseKey: string, locale: string) => `eVote_${baseKey}_${locale}`;
+
 
 const checkAndUpdatePollStatuses = (polls: Poll[]): Poll[] => {
   const now = new Date();
@@ -64,14 +67,12 @@ export default function AdminDashboardPage() {
   const [isResultsPublic, setIsResultsPublic] = useState(false);
   const [isLoadingVisibility, setIsLoadingVisibility] = useState(true);
 
-  const [customTexts, setCustomTexts] = useState<CustomTexts>({});
-  const [isLoadingCustomTexts, setIsLoadingCustomTexts] = useState(true);
-
-  // Local states for input fields, to be synced with customTexts[locale]
+  // Local states for input fields
   const [homeTitleInput, setHomeTitleInput] = useState('');
   const [homeDescriptionInput, setHomeDescriptionInput] = useState('');
   const [homeIntroTextInput, setHomeIntroTextInput] = useState('');
   const [voteIntroTextInput, setVoteIntroTextInput] = useState('');
+  const [isLoadingCustomTexts, setIsLoadingCustomTexts] = useState(true);
   
   const [polls, setPolls] = useState<Poll[]>([]);
   const [isLoadingPolls, setIsLoadingPolls] = useState(true);
@@ -97,43 +98,31 @@ export default function AdminDashboardPage() {
       return; 
     }
 
-    // Fetch results visibility
-    const fetchVisibility = async () => {
-      setIsLoadingVisibility(true);
-      try {
-        const response = await fetch('/api/results-visibility');
-        if (!response.ok) throw new Error('Failed to fetch visibility');
-        const data = await response.json();
-        setIsResultsPublic(data.isPublic);
-      } catch (error) {
-        console.error("Error fetching results visibility:", error);
-        setIsResultsPublic(false); // Default to private on error
-        toast({ title: t('toast.errorLoadingSettings'), description: t('toast.errorLoadingSettingsVisibilityDescription'), variant: "destructive" });
-      }
-      setIsLoadingVisibility(false);
-    };
+    // Fetch results visibility from localStorage
+    setIsLoadingVisibility(true);
+    try {
+      const storedVisibility = localStorage.getItem(RESULTS_VISIBILITY_KEY);
+      setIsResultsPublic(storedVisibility ? JSON.parse(storedVisibility) : false);
+    } catch (error) {
+      console.error("Error fetching results visibility from localStorage:", error);
+      setIsResultsPublic(false); 
+      toast({ title: t('toast.errorLoadingSettings'), description: t('toast.errorLoadingSettingsVisibilityDescription'), variant: "destructive" });
+    }
+    setIsLoadingVisibility(false);
 
-    fetchVisibility();
     loadPollsFromStorage();
   }, [router, toast, t]);
 
-  const fetchCustomTexts = useCallback(async () => {
+  const fetchAndSetCustomTexts = useCallback(() => {
     setIsLoadingCustomTexts(true);
     try {
-      const response = await fetch('/api/custom-texts');
-      if (!response.ok) throw new Error('Failed to fetch custom texts');
-      const data = await response.json() as CustomTexts;
-      setCustomTexts(data);
-      // Initialize input fields based on fetched data and current locale
-      setHomeTitleInput(data[locale]?.homePageTitle || defaultTexts.homeTitle);
-      setHomeDescriptionInput(data[locale]?.homePageDescription || defaultTexts.homeDescription);
-      setHomeIntroTextInput(data[locale]?.homePageIntroText || defaultTexts.homeIntro);
-      setVoteIntroTextInput(data[locale]?.votePageIntroText || defaultTexts.voteIntro);
-
+      setHomeTitleInput(localStorage.getItem(getCustomTextKey('homePageTitle', locale)) || defaultTexts.homeTitle);
+      setHomeDescriptionInput(localStorage.getItem(getCustomTextKey('homePageDescription', locale)) || defaultTexts.homeDescription);
+      setHomeIntroTextInput(localStorage.getItem(getCustomTextKey('homePageIntroText', locale)) || defaultTexts.homeIntro);
+      setVoteIntroTextInput(localStorage.getItem(getCustomTextKey('votePageIntroText', locale)) || defaultTexts.voteIntro);
     } catch (error) {
-      console.error("Error fetching custom texts:", error);
+      console.error("Error fetching custom texts from localStorage:", error);
       toast({ title: t('toast.errorLoadingTexts'), description: t('toast.errorLoadingTextsDescription'), variant: "destructive" });
-      // Set inputs to default on error
       setHomeTitleInput(defaultTexts.homeTitle);
       setHomeDescriptionInput(defaultTexts.homeDescription);
       setHomeIntroTextInput(defaultTexts.homeIntro);
@@ -144,19 +133,15 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     if(isAdminAuthenticated) {
-      fetchCustomTexts();
+      fetchAndSetCustomTexts();
     }
-  }, [isAdminAuthenticated, fetchCustomTexts]);
+  }, [isAdminAuthenticated, fetchAndSetCustomTexts]);
   
-  // Update input fields when locale changes and customTexts are loaded
   useEffect(() => {
-    if (!isLoadingCustomTexts) {
-      setHomeTitleInput(customTexts[locale]?.homePageTitle || defaultTexts.homeTitle);
-      setHomeDescriptionInput(customTexts[locale]?.homePageDescription || defaultTexts.homeDescription);
-      setHomeIntroTextInput(customTexts[locale]?.homePageIntroText || defaultTexts.homeIntro);
-      setVoteIntroTextInput(customTexts[locale]?.votePageIntroText || defaultTexts.voteIntro);
+    if (!isLoadingCustomTexts) { // Re-fetch if locale changes and texts are not currently loading
+        fetchAndSetCustomTexts();
     }
-  }, [locale, customTexts, isLoadingCustomTexts, defaultTexts]);
+  }, [locale, isLoadingCustomTexts, fetchAndSetCustomTexts]);
 
 
   const loadPollsFromStorage = () => {
@@ -194,44 +179,41 @@ export default function AdminDashboardPage() {
   const handleResultsVisibilityToggle = async (checked: boolean) => {
     setIsSavingVisibility(true);
     try {
-      const response = await fetch('/api/results-visibility', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isPublic: checked }),
-      });
-      if (!response.ok) throw new Error('Failed to update visibility');
+      localStorage.setItem(RESULTS_VISIBILITY_KEY, JSON.stringify(checked));
       setIsResultsPublic(checked);
       toast({ 
         title: t('toast.resultsVisibilityUpdated'), 
         description: t('toast.resultsVisibilityUpdatedDescription', { status: checked ? t('toast.resultsVisibility.public') : t('toast.resultsVisibility.private')}) 
       });
     } catch (error) {
-       console.error("Error saving results visibility:", error);
+       console.error("Error saving results visibility to localStorage:", error);
        toast({ title: t('toast.errorSavingSettings'), description: t('toast.errorSavingSettingsVisibilityDescription'), variant: "destructive" });
     }
     setIsSavingVisibility(false);
   };
 
-  const handleSaveCustomText = async (textKey: keyof CustomTexts[string], value: string, setLoadingState: (loading: boolean) => void, successToastTitle: string, successToastDesc: string, errorToastTitle: string, errorToastDesc: string) => {
+  const handleSaveCustomText = async (
+    textKey: 'homePageTitle' | 'homePageDescription' | 'homePageIntroText' | 'votePageIntroText', 
+    value: string, 
+    setLoadingState: (loading: boolean) => void, 
+    successToastTitleKey: string, 
+    successToastDescKey: string, 
+    errorToastTitleKey: string, 
+    errorToastDescKey: string
+  ) => {
     setLoadingState(true);
-    const newCustomTexts = JSON.parse(JSON.stringify(customTexts)) as CustomTexts;
-    if (!newCustomTexts[locale]) {
-      newCustomTexts[locale] = {};
-    }
-    (newCustomTexts[locale] as any)[textKey] = value;
-
     try {
-      const response = await fetch('/api/custom-texts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newCustomTexts),
-      });
-      if (!response.ok) throw new Error('Failed to save custom text');
-      setCustomTexts(newCustomTexts); // Update local state on conceptual success
-      toast({ title: t(successToastTitle), description: t(successToastDesc) });
+      localStorage.setItem(getCustomTextKey(textKey, locale), value);
+      // Update the corresponding input state locally to reflect the change immediately
+      if (textKey === 'homePageTitle') setHomeTitleInput(value);
+      else if (textKey === 'homePageDescription') setHomeDescriptionInput(value);
+      else if (textKey === 'homePageIntroText') setHomeIntroTextInput(value);
+      else if (textKey === 'votePageIntroText') setVoteIntroTextInput(value);
+      
+      toast({ title: t(successToastTitleKey), description: t(successToastDescKey) });
     } catch (error) {
-      console.error(`Error saving ${textKey}:`, error);
-      toast({ title: t(errorToastTitle), description: t(errorToastDesc), variant: "destructive" });
+      console.error(`Error saving ${textKey} to localStorage:`, error);
+      toast({ title: t(errorToastTitleKey), description: t(errorToastDescKey), variant: "destructive" });
     }
     setLoadingState(false);
   };
@@ -243,7 +225,7 @@ export default function AdminDashboardPage() {
       setPolls(updatedPolls);
       toast({ title: t('toast.pollDeleted'), description: t('toast.pollDeletedDescription') });
     } catch (error) {
-      console.error("Error deleting poll:", error);
+      console.error("Error deleting poll from localStorage:", error);
       toast({ title: t('toast.errorDeletingPoll'), description: t('toast.errorDeletingPollDescription'), variant: "destructive" });
     }
   };

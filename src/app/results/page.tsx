@@ -18,7 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const POLLS_STORAGE_KEY = 'eVote_polls_list'; // Polls remain in localStorage for this iteration
+const POLLS_STORAGE_KEY = 'eVote_polls_list'; 
+const RESULTS_VISIBILITY_KEY = 'eVote_resultsPublic';
+
 
 interface ChartData {
   name: string;
@@ -34,8 +36,8 @@ export default function ResultsPage() {
 
   const [allPolls, setAllPolls] = useState<Poll[]>([]);
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // General loading for page data
-  const [isLoadingVisibility, setIsLoadingVisibility] = useState(true); // Specific for visibility check
+  const [isLoading, setIsLoading] = useState(true); 
+  const [isLoadingVisibility, setIsLoadingVisibility] = useState(true); 
   const [totalVotes, setTotalVotes] = useState(0);
   const [winner, setWinner] = useState<PollCandidate | null>(null);
   const [canViewResults, setCanViewResults] = useState(false);
@@ -52,13 +54,11 @@ export default function ResultsPage() {
         setIsLoadingVisibility(false);
         return;
       }
-      const response = await fetch('/api/results-visibility');
-      if (!response.ok) throw new Error('Failed to fetch visibility status');
-      const data = await response.json();
-      setCanViewResults(data.isPublic);
+      const storedVisibility = localStorage.getItem(RESULTS_VISIBILITY_KEY);
+      setCanViewResults(storedVisibility ? JSON.parse(storedVisibility) : false);
     } catch (error) {
-      console.error("Error fetching results visibility:", error);
-      setCanViewResults(false); // Default to private on error
+      console.error("Error fetching results visibility from localStorage:", error);
+      setCanViewResults(false); 
     }
     setIsLoadingVisibility(false);
   }, []);
@@ -69,8 +69,7 @@ export default function ResultsPage() {
 
 
   useEffect(() => {
-    // This effect depends on canViewResults, which is set by fetchResultsVisibility
-    if (isLoadingVisibility) return; // Don't load polls until visibility check is done
+    if (isLoadingVisibility) return; 
 
     setIsLoading(true);
     try {
@@ -130,7 +129,7 @@ export default function ResultsPage() {
     }
     
     setIsLoading(false);
-  }, [targetPollId, t, isLoadingVisibility]); // Added isLoadingVisibility dependency
+  }, [targetPollId, t, isLoadingVisibility]); 
 
   const chartData: ChartData[] = useMemo(() => {
     if (!activePoll || !activePoll.votes || !canViewResults) return [];
