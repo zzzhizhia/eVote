@@ -6,10 +6,11 @@ import TickerTape from '@/components/results/TickerTape';
 import type { Poll, PollCandidate } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Award, Users, Info } from 'lucide-react';
+import { Award, Users, Info, ShieldAlert, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
 const POLLS_STORAGE_KEY = 'eVote_polls_list';
+const RESULTS_VISIBILITY_KEY = 'eVote_isResultsPublic';
 
 interface ChartData {
   name: string;
@@ -23,14 +24,29 @@ export default function ResultsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [totalVotes, setTotalVotes] = useState(0);
   const [winner, setWinner] = useState<PollCandidate | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [areResultsPublic, setAreResultsPublic] = useState(false);
+  const [canViewResults, setCanViewResults] = useState(false);
 
   useEffect(() => {
+    setIsLoading(true);
+    let currentPoll: Poll | null = null;
+    let adminStatus = false;
+    let publicVisibility = false;
+
     try {
+      adminStatus = localStorage.getItem('isAdminAuthenticated') === 'true';
+      setIsAdmin(adminStatus);
+
+      const storedVisibility = localStorage.getItem(RESULTS_VISIBILITY_KEY);
+      publicVisibility = storedVisibility ? JSON.parse(storedVisibility) : false;
+      setAreResultsPublic(publicVisibility);
+
       const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
       if (storedPollsRaw) {
         const storedPolls: Poll[] = JSON.parse(storedPollsRaw);
         if (storedPolls.length > 0) {
-          const currentPoll = storedPolls[storedPolls.length - 1]; // Use the latest poll
+          currentPoll = storedPolls[storedPolls.length - 1]; // Use the latest poll
           setActivePoll(currentPoll);
 
           let currentTotalVotes = 0;
@@ -51,41 +67,57 @@ export default function ResultsPage() {
           if (currentWinnerId) {
             setWinner(currentPoll.candidates.find(c => c.id === currentWinnerId) || null);
           } else if (currentPoll.candidates.length > 0 && currentTotalVotes === 0) {
-            // If no votes yet, or all votes are 0, there's no clear winner
             setWinner(null);
           }
-
-        } else {
-          setActivePoll(null);
         }
-      } else {
-        setActivePoll(null);
       }
     } catch (error) {
-      console.error("Error loading poll results from localStorage:", error);
+      console.error("Error loading data from localStorage:", error);
       setActivePoll(null);
-      // Consider adding a toast message here
     }
+    
+    setCanViewResults(adminStatus || publicVisibility);
     setIsLoading(false);
   }, []);
 
   const chartData: ChartData[] = useMemo(() => {
-    if (!activePoll || !activePoll.votes) return [];
+    if (!activePoll || !activePoll.votes || !canViewResults) return [];
     return activePoll.candidates.map(candidate => ({
       name: candidate.name,
       votes: activePoll.votes?.[candidate.id] || 0,
     })).sort((a, b) => b.votes - a.votes);
-  }, [activePoll]);
+  }, [activePoll, canViewResults]);
 
 
   if (isLoading) {
     return (
-      <div className="text-center py-10">
-        <p className="text-lg text-muted-foreground">Loading results...</p>
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-10">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="text-lg text-muted-foreground mt-4">Loading results...</p>
       </div>
     );
   }
 
+  if (!canViewResults && !isAdmin) {
+     return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-12">
+        <Card className="w-full max-w-lg text-center shadow-lg">
+          <CardHeader>
+            <div className="flex justify-center mb-3">
+              <ShieldAlert className="h-12 w-12 text-destructive" />
+            </div>
+            <CardTitle className="text-2xl">Results Not Public</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CardDescription className="text-base">
+              The results for this poll are not yet publicly available. Please check back later or contact an administrator.
+            </CardDescription>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  
   if (!activePoll) {
     return (
        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-12">
@@ -106,6 +138,7 @@ export default function ResultsPage() {
     );
   }
 
+  // At this point, user can view results (either admin or results are public) and activePoll exists.
   return (
     <div className="flex flex-col items-center space-y-10 py-8">
       <h1 className="text-4xl font-bold tracking-tight text-center text-primary">
