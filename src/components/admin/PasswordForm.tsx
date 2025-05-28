@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,10 +11,6 @@ import { KeyRound, ShieldAlert } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from '@/contexts/LanguageContext';
 
-// For demo purposes, the password is hardcoded here.
-// In a real application, this should be handled securely, e.g., via environment variables and a backend check.
-const ACTUAL_ADMIN_PASSWORD = 'admin123'; // Default admin password
-
 export default function PasswordForm() {
   const { t } = useLanguage();
   const [password, setPassword] = useState('');
@@ -22,32 +18,68 @@ export default function PasswordForm() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    // Check if already admin on mount
+    fetch('/api/user')
+      .then(res => res.json())
+      .then(data => {
+        if (data.isAdmin) {
+          router.push('/admin/dashboard');
+        } else {
+          setIsCheckingAuth(false);
+        }
+      })
+      .catch(() => setIsCheckingAuth(false));
+  }, [router]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
     setError('');
 
-    // Simulate a short delay for a more realistic loading experience
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    if (password === ACTUAL_ADMIN_PASSWORD) {
-      toast({
-        title: t('toast.accessGranted'),
-        description: t('toast.accessGrantedDescription'),
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
       });
-      localStorage.setItem('isAdminAuthenticated', 'true'); // Session flag
-      router.push('/admin/dashboard');
-    } else {
-      setError(t('admin.login.invalidPasswordError'));
+
+      if (response.ok) {
+        toast({
+          title: t('toast.accessGranted'),
+          description: t('toast.accessGrantedDescription'),
+        });
+        router.push('/admin/dashboard');
+        router.refresh(); // To ensure layout re-renders with new auth state if necessary
+      } else {
+        const data = await response.json();
+        setError(data.message || t('admin.login.invalidPasswordError'));
+        toast({
+          title: t('toast.accessDenied'),
+          description: data.message || t('toast.accessDeniedDescription'),
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      setError(t('admin.login.networkError'));
       toast({
-        title: t('toast.accessDenied'),
-        description: t('toast.accessDeniedDescription'),
+        title: t('toast.networkErrorTitle'),
+        description: t('admin.login.networkErrorDescription'),
         variant: "destructive",
       });
     }
     setIsLoading(false);
   };
+
+  if (isCheckingAuth) {
+    return (
+        <div className="flex items-center justify-center min-h-[calc(100vh-15rem)]">
+            <KeyRound className="h-12 w-12 text-primary animate-pulse" />
+        </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-15rem)]">

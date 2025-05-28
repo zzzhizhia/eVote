@@ -8,7 +8,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Megaphone, VoteIcon, Loader2 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
-const getCustomTextKey = (baseKey: string, locale: string) => `eVote_${baseKey}_${locale}`;
+interface CustomTextsForLocale {
+  homePageTitle?: string;
+  homePageDescription?: string;
+  homePageIntroText?: string;
+}
 
 export default function HomePage() {
   const { t, locale } = useLanguage();
@@ -18,37 +22,37 @@ export default function HomePage() {
   const [displayDescription, setDisplayDescription] = useState('');
   const [introParagraph, setIntroParagraph] = useState('');
 
-  const defaultTexts = useMemo(() => ({
+  const defaultLocalizedTexts = useMemo(() => ({
     title: t('home.title'),
     description: t('home.description'),
     introParagraph: t('home.defaultIntro'),
   }), [t]);
 
-  const loadCustomTexts = useCallback(() => {
+  const loadCustomTexts = useCallback(async () => {
     setIsLoadingTexts(true);
     try {
-      const storedTitle = localStorage.getItem(getCustomTextKey('homePageTitle', locale));
-      setDisplayTitle(storedTitle || defaultTexts.title);
-
-      const storedDescription = localStorage.getItem(getCustomTextKey('homePageDescription', locale));
-      setDisplayDescription(storedDescription || defaultTexts.description);
+      const res = await fetch('/api/settings');
+      if (!res.ok) throw new Error('Failed to fetch settings');
+      const settingsData = await res.json();
       
-      const storedIntro = localStorage.getItem(getCustomTextKey('homePageIntroText', locale));
-      setIntroParagraph(storedIntro || defaultTexts.introParagraph);
+      const currentLocaleCustomTexts: CustomTextsForLocale = settingsData.customTexts?.[locale] || {};
+
+      setDisplayTitle(currentLocaleCustomTexts.homePageTitle || defaultLocalizedTexts.title);
+      setDisplayDescription(currentLocaleCustomTexts.homePageDescription || defaultLocalizedTexts.description);
+      setIntroParagraph(currentLocaleCustomTexts.homePageIntroText || defaultLocalizedTexts.introParagraph);
 
     } catch (error) {
-      console.error("Error loading custom texts from localStorage:", error);
-      // Fallback to defaults on error
-      setDisplayTitle(defaultTexts.title);
-      setDisplayDescription(defaultTexts.description);
-      setIntroParagraph(defaultTexts.introParagraph);
+      console.error("Error loading custom texts from API:", error);
+      setDisplayTitle(defaultLocalizedTexts.title);
+      setDisplayDescription(defaultLocalizedTexts.description);
+      setIntroParagraph(defaultLocalizedTexts.introParagraph);
     }
     setIsLoadingTexts(false);
-  }, [locale, defaultTexts]);
+  }, [locale, defaultLocalizedTexts]);
 
   useEffect(() => {
     loadCustomTexts();
-  }, [loadCustomTexts]); // locale change is handled by loadCustomTexts dependency on locale
+  }, [loadCustomTexts]);
 
   if (isLoadingTexts) {
     return (

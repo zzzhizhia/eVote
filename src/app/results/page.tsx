@@ -17,9 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-const POLLS_STORAGE_KEY = 'eVote_polls_list'; 
-const RESULTS_VISIBILITY_KEY = 'eVote_resultsPublic';
+import { parseISO, format } from 'date-fns';
 
 
 interface ChartData {
@@ -29,6 +27,18 @@ interface ChartData {
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
+const checkPollStatus = (poll: Poll): Poll => {
+  const now = new Date();
+  if (poll.isOpen && poll.scheduledCloseTime) {
+    const closeTime = parseISO(poll.scheduledCloseTime);
+    if (now >= closeTime) {
+      return { ...poll, isOpen: false };
+    }
+  }
+  return poll;
+};
+
+
 export default function ResultsPage() {
   const router = useRouter();
   const searchParams = useSearchParams(); 
@@ -37,99 +47,88 @@ export default function ResultsPage() {
   const [allPolls, setAllPolls] = useState<Poll[]>([]);
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
   const [isLoading, setIsLoading] = useState(true); 
-  const [isLoadingVisibility, setIsLoadingVisibility] = useState(true); 
-  const [totalVotes, setTotalVotes] = useState(0);
-  const [winner, setWinner] = useState<PollCandidate | null>(null);
   const [canViewResults, setCanViewResults] = useState(false);
-  const [pollTitleForDisplay, setPollTitleForDisplay] = useState<string | null>(null);
   
   const targetPollId = searchParams.get('pollId');
 
-  const fetchResultsVisibility = useCallback(async () => {
-    setIsLoadingVisibility(true);
-    try {
-      const adminAuth = localStorage.getItem('isAdminAuthenticated') === 'true';
-      if (adminAuth) {
-        setCanViewResults(true);
-        setIsLoadingVisibility(false);
-        return;
-      }
-      const storedVisibility = localStorage.getItem(RESULTS_VISIBILITY_KEY);
-      setCanViewResults(storedVisibility ? JSON.parse(storedVisibility) : false);
-    } catch (error) {
-      console.error("Error fetching results visibility from localStorage:", error);
-      setCanViewResults(false); 
-    }
-    setIsLoadingVisibility(false);
-  }, []);
-
-  useEffect(() => {
-    fetchResultsVisibility();
-  }, [fetchResultsVisibility]);
-
-
-  useEffect(() => {
-    if (isLoadingVisibility) return; 
-
+  const fetchResultsVisibilityAndPolls = useCallback(async () => {
     setIsLoading(true);
     try {
-      const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
-      if (storedPollsRaw) {
-        const storedPolls: Poll[] = JSON.parse(storedPollsRaw);
-        setAllPolls(storedPolls.sort((a, b) => (b.id > a.id ? 1 : -1))); 
-        
-        let pollToDisplay: Poll | null = null;
-
-        if (targetPollId) {
-          pollToDisplay = storedPolls.find(p => p.id === targetPollId) || null;
-        } else if (storedPolls.length > 0) {
-          pollToDisplay = storedPolls[0]; 
+      // Check admin status first to potentially bypass visibility setting
+      let isAdmin = false;
+      try {
+        const userRes = await fetch('/api/user');
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          isAdmin = userData.isAdmin;
         }
-        
-        setActivePoll(pollToDisplay);
-        setPollTitleForDisplay(pollToDisplay ? pollToDisplay.title : t('resultsPage.noPollSelected'));
+      } catch (e) { /* ignore, not admin */ }
 
-        if (pollToDisplay) {
-          let currentTotalVotes = 0;
-          let maxVotes = -1;
-          let currentWinnerId: string | null = null;
-
-          if (pollToDisplay.votes) {
-            for (const candidateId in pollToDisplay.votes) {
-              const voteCount = pollToDisplay.votes[candidateId];
-              currentTotalVotes += voteCount;
-              if (voteCount > maxVotes) {
-                maxVotes = voteCount;
-                currentWinnerId = candidateId;
-              } else if (voteCount === maxVotes && maxVotes > 0) { 
-                currentWinnerId = null; 
-              }
-            }
-          }
-          setTotalVotes(currentTotalVotes);
-          if (currentWinnerId && maxVotes > 0) { 
-            setWinner(pollToDisplay.candidates.find(c => c.id === currentWinnerId) || null);
-          } else {
-            setWinner(null); 
-          }
-        } else {
-           setTotalVotes(0);
-           setWinner(null);
-        }
+      if (isAdmin) {
+        setCanViewResults(true);
       } else {
-        setAllPolls([]);
-        setActivePoll(null);
-        setPollTitleForDisplay(t('resultsPage.noPollsAvailable'));
+        const settingsRes = await fetch('/api/settings');
+        if (!settingsRes.ok) throw new Error('Failed to fetch settings');
+        const settingsData = await settingsRes.json();
+        setCanViewResults(settingsData.resultsVisibility || false);
       }
+      
+      // Fetch all polls
+      const pollsRes = await fetch('/api/polls');
+      if (!pollsRes.ok) throw new Error('Failed to fetch polls');
+      const fetchedPolls: Poll[] = await pollsRes.json();
+      
+      const upToDatePolls = fetchedPolls.map(checkPollStatus);
+      setAllPolls(upToDatePolls.sort((a, b) => (new Date(b.id.substring(0,13)) as any) - (new Date(a.id.substring(0,13)) as any))); // Sort by creation desc
+        
+      let pollToDisplay: Poll | null = null;
+      if (targetPollId) {
+        pollToDisplay = upToDatePolls.find(p => p.id === targetPollId) || null;
+      } else if (upToDatePolls.length > 0) {
+        pollToDisplay = upToDatePolls[0]; 
+      }
+      
+      setActivePoll(pollToDisplay);
+
     } catch (error) {
-      console.error("Error loading poll data from localStorage:", error);
+      console.error("Error loading results page data:", error);
+      // Handle errors appropriately, maybe set an error state
+      setCanViewResults(false); // Default to not viewable on error
       setAllPolls([]);
       setActivePoll(null);
-      setPollTitleForDisplay(t('resultsPage.errorLoadingPoll'));
     }
-    
     setIsLoading(false);
-  }, [targetPollId, t, isLoadingVisibility]); 
+  }, [targetPollId]);
+
+  useEffect(() => {
+    fetchResultsVisibilityAndPolls();
+  }, [fetchResultsVisibilityAndPolls]);
+
+  const totalVotes = useMemo(() => {
+    if (!activePoll || !activePoll.votes) return 0;
+    return Object.values(activePoll.votes).reduce((sum, count) => sum + count, 0);
+  }, [activePoll]);
+
+  const winner = useMemo(() => {
+    if (!activePoll || !activePoll.votes || totalVotes === 0) return null;
+    let maxVotes = -1;
+    let currentWinnerId: string | null = null;
+    let tie = false;
+
+    for (const candidateId in activePoll.votes) {
+      const voteCount = activePoll.votes[candidateId];
+      if (voteCount > maxVotes) {
+        maxVotes = voteCount;
+        currentWinnerId = candidateId;
+        tie = false;
+      } else if (voteCount === maxVotes && maxVotes > 0) {
+        tie = true;
+      }
+    }
+    if (tie || !currentWinnerId) return null;
+    return activePoll.candidates.find(c => c.id === currentWinnerId) || null;
+  }, [activePoll, totalVotes]);
+
 
   const chartData: ChartData[] = useMemo(() => {
     if (!activePoll || !activePoll.votes || !canViewResults) return [];
@@ -147,7 +146,7 @@ export default function ResultsPage() {
     }
   };
 
-  if (isLoading || isLoadingVisibility) {
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-10">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -156,7 +155,7 @@ export default function ResultsPage() {
     );
   }
 
-  if (!canViewResults) { 
+  if (!canViewResults && !isLoading) { 
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-12">
         <Card className="w-full max-w-lg text-center shadow-lg">
@@ -176,11 +175,13 @@ export default function ResultsPage() {
     );
   }
   
+  const pollTitleForDisplay = activePoll ? activePoll.title : (allPolls.length > 0 ? t('resultsPage.noPollSelected') : t('resultsPage.noPollsAvailable'));
+
   return (
     <div className="flex flex-col items-center space-y-8 py-8">
       <div className="w-full max-w-4xl flex flex-col sm:flex-row justify-between items-center gap-4 px-4 sm:px-0">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-center sm:text-left text-primary flex-grow">
-          {activePoll ? t('resultsPage.pageTitle', { pollTitle: pollTitleForDisplay || '' }) : t('resultsPage.noPollSelected')}
+          {activePoll ? t('resultsPage.pageTitle', { pollTitle: pollTitleForDisplay || '' }) : pollTitleForDisplay}
         </h1>
         {allPolls.length > 0 && (
           <div className="w-full sm:w-auto min-w-[250px]">
@@ -296,7 +297,7 @@ export default function ResultsPage() {
                           {t('resultsPage.candidateVoteStats', { count: candidateVotes.toString(), percentage: percentage.toFixed(1) })}
                         </p>
                       </div>
-                      <Progress value={percentage} aria-label={t('resultsPage.candidateVoteStats', { count: candidateVotes.toString(), percentage: percentage.toFixed(1) })} className="h-3 [&>div]:bg-primary" />
+                      <Progress value={percentage} aria-label={t('resultsPage.candidateVoteStatsAria', { candidateName: candidate.name, count: candidateVotes.toString(), percentage: percentage.toFixed(1) })} className="h-3 [&>div]:bg-primary" />
                     </div>
                   );
                 })

@@ -7,13 +7,12 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine, ListChecks, Edit3, Trash2, Clock, ToggleLeft, ToggleRight, CheckCircle, XCircle, FileText, MessageSquareText, Loader2 } from 'lucide-react';
+import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine, ListChecks, Edit3, Trash2, Clock, ToggleLeft, ToggleRight, CheckCircle, XCircle, FileText, MessageSquareText, Loader2, LogOut } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll } from '@/lib/types';
-// Removed CustomTexts import as we'll use individual localStorage items
 import { format, parseISO } from 'date-fns';
 import {
   AlertDialog,
@@ -28,33 +27,27 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useLanguage } from '@/contexts/LanguageContext';
 
-const POLLS_STORAGE_KEY = 'eVote_polls_list';
-const RESULTS_VISIBILITY_KEY = 'eVote_resultsPublic';
-const getCustomTextKey = (baseKey: string, locale: string) => `eVote_${baseKey}_${locale}`;
+interface CustomTexts {
+  homePageTitle?: string;
+  homePageDescription?: string;
+  homePageIntroText?: string;
+  votePageIntroText?: string;
+}
 
-
-const checkAndUpdatePollStatuses = (polls: Poll[]): Poll[] => {
+const checkAndUpdatePollStatuses = (polls: Poll[]): { updatedPolls: Poll[], wasChanged: boolean } => {
   const now = new Date();
-  let pollsUpdated = false;
+  let wasChanged = false;
   const updatedPolls = polls.map(poll => {
     if (poll.isOpen && poll.scheduledCloseTime) {
       const closeTime = parseISO(poll.scheduledCloseTime);
       if (now >= closeTime) {
-        pollsUpdated = true;
+        wasChanged = true;
         return { ...poll, isOpen: false };
       }
     }
     return poll;
   });
-
-  if (pollsUpdated) {
-    try {
-      localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(updatedPolls));
-    } catch (error) {
-        console.error("Error auto-updating poll statuses in localStorage:", error);
-    }
-  }
-  return updatedPolls;
+  return { updatedPolls, wasChanged };
 };
 
 
@@ -64,108 +57,135 @@ export default function AdminDashboardPage() {
   const { t, locale } = useLanguage(); 
 
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
   const [isResultsPublic, setIsResultsPublic] = useState(false);
   const [isLoadingVisibility, setIsLoadingVisibility] = useState(true);
 
-  // Local states for input fields
-  const [homeTitleInput, setHomeTitleInput] = useState('');
-  const [homeDescriptionInput, setHomeDescriptionInput] = useState('');
-  const [homeIntroTextInput, setHomeIntroTextInput] = useState('');
-  const [voteIntroTextInput, setVoteIntroTextInput] = useState('');
+  const [customTexts, setCustomTexts] = useState<CustomTexts>({});
   const [isLoadingCustomTexts, setIsLoadingCustomTexts] = useState(true);
   
   const [polls, setPolls] = useState<Poll[]>([]);
   const [isLoadingPolls, setIsLoadingPolls] = useState(true);
 
-  const [isSavingVisibility, setIsSavingVisibility] = useState(false);
-  const [isSavingHomeTitle, setIsSavingHomeTitle] = useState(false);
-  const [isSavingHomeDescription, setIsSavingHomeDescription] = useState(false);
-  const [isSavingHomeIntro, setIsSavingHomeIntro] = useState(false);
-  const [isSavingVoteIntro, setIsSavingVoteIntro] = useState(false);
+  // Input states tied to customTexts for editing
+  const [homeTitleInput, setHomeTitleInput] = useState('');
+  const [homeDescriptionInput, setHomeDescriptionInput] = useState('');
+  const [homeIntroTextInput, setHomeIntroTextInput] = useState('');
+  const [voteIntroTextInput, setVoteIntroTextInput] = useState('');
 
-  const defaultTexts = useMemo(() => ({
-    homeTitle: t('home.title'),
-    homeDescription: t('home.description'),
-    homeIntro: t('home.defaultIntro'),
-    voteIntro: t('votePage.defaultIntro'),
+  const [isSavingVisibility, setIsSavingVisibility] = useState(false);
+  const [isSavingCustomTexts, setIsSavingCustomTexts] = useState<{[key: string]: boolean}>({});
+
+
+  const defaultLocalizedTexts = useMemo(() => ({
+    homePageTitle: t('home.title'),
+    homePageDescription: t('home.description'),
+    homePageIntroText: t('home.defaultIntro'),
+    votePageIntroText: t('votePage.defaultIntro'),
   }), [t]);
 
-  useEffect(() => {
-    const authStatus = localStorage.getItem('isAdminAuthenticated') === 'true';
-    setIsAdminAuthenticated(authStatus);
-    if (!authStatus) {
+  const fetchAdminStatusAndData = useCallback(async () => {
+    setIsAuthLoading(true);
+    try {
+      const userRes = await fetch('/api/user');
+      if (!userRes.ok) throw new Error('Failed to fetch user status');
+      const userData = await userRes.json();
+
+      if (!userData.isAdmin) {
+        router.push('/admin');
+        return;
+      }
+      setIsAdminAuthenticated(true);
+
+      // Fetch settings (results visibility and custom texts)
+      setIsLoadingVisibility(true);
+      setIsLoadingCustomTexts(true);
+      const settingsRes = await fetch('/api/settings');
+      if (!settingsRes.ok) throw new Error('Failed to fetch settings');
+      const settingsData = await settingsRes.json();
+      
+      setIsResultsPublic(settingsData.resultsVisibility || false);
+      
+      const currentLocaleCustomTexts = settingsData.customTexts?.[locale] || {};
+      setCustomTexts(settingsData.customTexts || {}); // Store all languages
+      
+      setHomeTitleInput(currentLocaleCustomTexts.homePageTitle || defaultLocalizedTexts.homePageTitle);
+      setHomeDescriptionInput(currentLocaleCustomTexts.homePageDescription || defaultLocalizedTexts.homePageDescription);
+      setHomeIntroTextInput(currentLocaleCustomTexts.homePageIntroText || defaultLocalizedTexts.homePageIntroText);
+      setVoteIntroTextInput(currentLocaleCustomTexts.votePageIntroText || defaultLocalizedTexts.votePageIntroText);
+
+      setIsLoadingVisibility(false);
+      setIsLoadingCustomTexts(false);
+
+      // Fetch polls
+      loadPolls();
+
+    } catch (error) {
+      console.error("Error fetching admin data:", error);
+      toast({ title: t('toast.errorLoadingData'), description: t('toast.errorLoadingDataDescription'), variant: "destructive" });
       router.push('/admin');
-      return; 
+    } finally {
+      setIsAuthLoading(false);
     }
-
-    // Fetch results visibility from localStorage
-    setIsLoadingVisibility(true);
-    try {
-      const storedVisibility = localStorage.getItem(RESULTS_VISIBILITY_KEY);
-      setIsResultsPublic(storedVisibility ? JSON.parse(storedVisibility) : false);
-    } catch (error) {
-      console.error("Error fetching results visibility from localStorage:", error);
-      setIsResultsPublic(false); 
-      toast({ title: t('toast.errorLoadingSettings'), description: t('toast.errorLoadingSettingsVisibilityDescription'), variant: "destructive" });
-    }
-    setIsLoadingVisibility(false);
-
-    loadPollsFromStorage();
-  }, [router, toast, t]);
-
-  const fetchAndSetCustomTexts = useCallback(() => {
-    setIsLoadingCustomTexts(true);
-    try {
-      setHomeTitleInput(localStorage.getItem(getCustomTextKey('homePageTitle', locale)) || defaultTexts.homeTitle);
-      setHomeDescriptionInput(localStorage.getItem(getCustomTextKey('homePageDescription', locale)) || defaultTexts.homeDescription);
-      setHomeIntroTextInput(localStorage.getItem(getCustomTextKey('homePageIntroText', locale)) || defaultTexts.homeIntro);
-      setVoteIntroTextInput(localStorage.getItem(getCustomTextKey('votePageIntroText', locale)) || defaultTexts.voteIntro);
-    } catch (error) {
-      console.error("Error fetching custom texts from localStorage:", error);
-      toast({ title: t('toast.errorLoadingTexts'), description: t('toast.errorLoadingTextsDescription'), variant: "destructive" });
-      setHomeTitleInput(defaultTexts.homeTitle);
-      setHomeDescriptionInput(defaultTexts.homeDescription);
-      setHomeIntroTextInput(defaultTexts.homeIntro);
-      setVoteIntroTextInput(defaultTexts.voteIntro);
-    }
-    setIsLoadingCustomTexts(false);
-  }, [locale, toast, t, defaultTexts]);
+  }, [router, toast, t, locale, defaultLocalizedTexts]);
 
   useEffect(() => {
-    if(isAdminAuthenticated) {
-      fetchAndSetCustomTexts();
+    fetchAdminStatusAndData();
+  }, [fetchAdminStatusAndData]);
+
+  // Refetch custom texts if locale changes
+   useEffect(() => {
+    if (isAdminAuthenticated && !isLoadingCustomTexts) {
+        const currentLocaleCustomTexts = customTexts[locale as keyof typeof customTexts] || {};
+        setHomeTitleInput(currentLocaleCustomTexts.homePageTitle || defaultLocalizedTexts.homePageTitle);
+        setHomeDescriptionInput(currentLocaleCustomTexts.homePageDescription || defaultLocalizedTexts.homePageDescription);
+        setHomeIntroTextInput(currentLocaleCustomTexts.homePageIntroText || defaultLocalizedTexts.homePageIntroText);
+        setVoteIntroTextInput(currentLocaleCustomTexts.votePageIntroText || defaultLocalizedTexts.votePageIntroText);
     }
-  }, [isAdminAuthenticated, fetchAndSetCustomTexts]);
-  
-  useEffect(() => {
-    if (!isLoadingCustomTexts) { // Re-fetch if locale changes and texts are not currently loading
-        fetchAndSetCustomTexts();
-    }
-  }, [locale, isLoadingCustomTexts, fetchAndSetCustomTexts]);
+  }, [locale, isAdminAuthenticated, isLoadingCustomTexts, customTexts, defaultLocalizedTexts]);
 
 
-  const loadPollsFromStorage = () => {
+  const loadPolls = async () => {
     setIsLoadingPolls(true);
     try {
-      const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
-      let existingPolls: Poll[] = storedPollsRaw ? JSON.parse(storedPollsRaw) : [];
-      existingPolls = checkAndUpdatePollStatuses(existingPolls); 
-      setPolls(existingPolls);
+      const res = await fetch('/api/polls');
+      if (!res.ok) throw new Error('Failed to fetch polls');
+      let fetchedPolls: Poll[] = await res.json();
+      
+      const { updatedPolls, wasChanged } = checkAndUpdatePollStatuses(fetchedPolls);
+      setPolls(updatedPolls);
+
+      if (wasChanged) { // If any poll status was auto-updated, persist this change
+        for (const poll of updatedPolls) {
+          if (!poll.isOpen && fetchedPolls.find(p => p.id === poll.id)?.isOpen) { // Check if this specific poll was closed
+            await fetch(`/api/polls/${poll.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(poll), // Send the whole poll object to update its status
+            });
+          }
+        }
+      }
     } catch (error) {
-      console.error("Error reading polls from localStorage:", error);
+      console.error("Error loading polls:", error);
       setPolls([]);
       toast({ title: t('toast.errorLoadingPolls'), description: t('toast.errorLoadingPollsDescription'), variant: "destructive" });
     }
     setIsLoadingPolls(false);
   };
   
-  const handleTogglePollStatus = (pollId: string, currentStatus: boolean) => {
+  const handleTogglePollStatus = async (poll: Poll, currentStatus: boolean) => {
+    const updatedPoll = { ...poll, isOpen: !currentStatus };
     try {
-      const updatedPolls = polls.map(p => 
-        p.id === pollId ? { ...p, isOpen: !currentStatus } : p
-      );
-      localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(updatedPolls));
-      setPolls(updatedPolls); 
+      const res = await fetch(`/api/polls/${poll.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPoll),
+      });
+      if (!res.ok) throw new Error('Failed to update poll status');
+      
+      setPolls(prevPolls => prevPolls.map(p => (p.id === poll.id ? updatedPoll : p)));
       toast({
         title: !currentStatus ? t('toast.pollStatusOpened') : t('toast.pollStatusClosed'),
         description: t('toast.pollStatusChangedDescription', { status: !currentStatus ? t('toast.pollStatus.acceptingVotes') : t('toast.pollStatus.closedForVoting')}),
@@ -179,67 +199,92 @@ export default function AdminDashboardPage() {
   const handleResultsVisibilityToggle = async (checked: boolean) => {
     setIsSavingVisibility(true);
     try {
-      localStorage.setItem(RESULTS_VISIBILITY_KEY, JSON.stringify(checked));
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'resultsVisibility', value: checked }),
+      });
+      if (!res.ok) throw new Error('Failed to update results visibility');
+      
       setIsResultsPublic(checked);
       toast({ 
         title: t('toast.resultsVisibilityUpdated'), 
         description: t('toast.resultsVisibilityUpdatedDescription', { status: checked ? t('toast.resultsVisibility.public') : t('toast.resultsVisibility.private')}) 
       });
     } catch (error) {
-       console.error("Error saving results visibility to localStorage:", error);
+       console.error("Error saving results visibility:", error);
        toast({ title: t('toast.errorSavingSettings'), description: t('toast.errorSavingSettingsVisibilityDescription'), variant: "destructive" });
     }
     setIsSavingVisibility(false);
   };
 
   const handleSaveCustomText = async (
-    textKey: 'homePageTitle' | 'homePageDescription' | 'homePageIntroText' | 'votePageIntroText', 
-    value: string, 
-    setLoadingState: (loading: boolean) => void, 
+    fieldKey: 'homePageTitle' | 'homePageDescription' | 'homePageIntroText' | 'votePageIntroText', 
+    value: string,
     successToastTitleKey: string, 
     successToastDescKey: string, 
     errorToastTitleKey: string, 
     errorToastDescKey: string
   ) => {
-    setLoadingState(true);
+    setIsSavingCustomTexts(prev => ({...prev, [fieldKey]: true}));
     try {
-      localStorage.setItem(getCustomTextKey(textKey, locale), value);
-      // Update the corresponding input state locally to reflect the change immediately
-      if (textKey === 'homePageTitle') setHomeTitleInput(value);
-      else if (textKey === 'homePageDescription') setHomeDescriptionInput(value);
-      else if (textKey === 'homePageIntroText') setHomeIntroTextInput(value);
-      else if (textKey === 'votePageIntroText') setVoteIntroTextInput(value);
+      const updatedCustomTexts = {
+        ...customTexts,
+        [locale]: {
+          ...(customTexts[locale as keyof typeof customTexts] || {}),
+          [fieldKey]: value,
+        }
+      };
+
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'customTexts', value: updatedCustomTexts }),
+      });
+      if (!res.ok) throw new Error('Failed to save custom texts');
+
+      setCustomTexts(updatedCustomTexts); // Update local state with all languages
+      // Update input state specifically for current locale
+      if (fieldKey === 'homePageTitle') setHomeTitleInput(value);
+      else if (fieldKey === 'homePageDescription') setHomeDescriptionInput(value);
+      else if (fieldKey === 'homePageIntroText') setHomeIntroTextInput(value);
+      else if (fieldKey === 'votePageIntroText') setVoteIntroTextInput(value);
       
       toast({ title: t(successToastTitleKey), description: t(successToastDescKey) });
     } catch (error) {
-      console.error(`Error saving ${textKey} to localStorage:`, error);
+      console.error(`Error saving ${fieldKey}:`, error);
       toast({ title: t(errorToastTitleKey), description: t(errorToastDescKey), variant: "destructive" });
     }
-    setLoadingState(false);
+    setIsSavingCustomTexts(prev => ({...prev, [fieldKey]: false}));
   };
 
-  const handleDeletePoll = (pollId: string) => {
+  const handleDeletePoll = async (pollId: string) => {
     try {
-      const updatedPolls = polls.filter(p => p.id !== pollId);
-      localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(updatedPolls));
-      setPolls(updatedPolls);
+      const res = await fetch(`/api/polls/${pollId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete poll');
+      
+      setPolls(prevPolls => prevPolls.filter(p => p.id !== pollId));
       toast({ title: t('toast.pollDeleted'), description: t('toast.pollDeletedDescription') });
     } catch (error) {
-      console.error("Error deleting poll from localStorage:", error);
+      console.error("Error deleting poll:", error);
       toast({ title: t('toast.errorDeletingPoll'), description: t('toast.errorDeletingPollDescription'), variant: "destructive" });
     }
   };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+      toast({ title: t('toast.loggedOut') });
+      router.push('/admin');
+    } catch (error) {
+      toast({ title: t('toast.logoutError'), variant: 'destructive' });
+    }
+  };
   
-  if (!isAdminAuthenticated) {
+  if (isAuthLoading || !isAdminAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-15rem)] py-10">
-        <Card className="w-full max-w-md text-center">
-          <CardHeader>
-            <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-3" />
-            <CardTitle className="text-2xl">{t('admin.dashboard.adminAccessDenied')}</CardTitle>
-          </CardHeader>
-          <CardContent><p>{t('admin.dashboard.adminAccessDeniedDescription')}</p></CardContent>
-        </Card>
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
@@ -251,10 +296,13 @@ export default function AdminDashboardPage() {
   return (
     <div className="flex flex-col items-center py-10 space-y-8">
       <Card className="w-full max-w-xl shadow-xl">
-        <CardHeader className="items-center text-center">
+        <CardHeader className="items-center text-center relative">
           <Settings className="h-12 w-12 text-primary mb-3" />
           <CardTitle className="text-3xl font-bold">{t('admin.dashboard.title')}</CardTitle>
           <CardDescription className="text-lg">{t('admin.dashboard.description')}</CardDescription>
+           <Button onClick={handleLogout} variant="outline" size="sm" className="absolute top-4 right-4">
+            <LogOut className="mr-2 h-4 w-4" /> {t('admin.dashboard.logoutButton')}
+          </Button>
         </CardHeader>
         <CardContent className="flex flex-col items-center space-y-6 p-6">
           <Button asChild size="lg" className="w-full max-w-xs shadow-md hover:shadow-lg transition-shadow">
@@ -303,7 +351,7 @@ export default function AdminDashboardPage() {
                         <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
                           <Switch 
                             checked={poll.isOpen} 
-                            onCheckedChange={() => handleTogglePollStatus(poll.id, poll.isOpen)}
+                            onCheckedChange={() => handleTogglePollStatus(poll, poll.isOpen)}
                             aria-label={t('admin.dashboard.togglePollStatusAriaLabel', { pollTitle: poll.title })}
                             className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
                           />
@@ -377,10 +425,10 @@ export default function AdminDashboardPage() {
             </CardContent>
             <CardFooter className="border-t pt-4">
               <Button 
-                onClick={() => handleSaveCustomText('homePageTitle', homeTitleInput, setIsSavingHomeTitle, 'toast.homeTitleSaved', 'toast.homeTitleSavedDescription', 'toast.errorSavingHomeTitle', 'toast.errorSavingHomeTitleDescription')} 
+                onClick={() => handleSaveCustomText('homePageTitle', homeTitleInput, 'toast.homeTitleSaved', 'toast.homeTitleSavedDescription', 'toast.errorSavingHomeTitle', 'toast.errorSavingHomeTitleDescription')} 
                 className="w-full" 
-                disabled={isLoadingCustomTexts || isSavingHomeTitle}>
-                 <CurrentIcon isLoading={isSavingHomeTitle} /> {t('admin.dashboard.saveHomePageTitleButton')}
+                disabled={isLoadingCustomTexts || isSavingCustomTexts['homePageTitle']}>
+                 <CurrentIcon isLoading={isSavingCustomTexts['homePageTitle'] || false} /> {t('admin.dashboard.saveHomePageTitleButton')}
               </Button>
             </CardFooter>
           </Card>
@@ -395,10 +443,10 @@ export default function AdminDashboardPage() {
             </CardContent>
             <CardFooter className="border-t pt-4">
               <Button 
-                onClick={() => handleSaveCustomText('homePageDescription', homeDescriptionInput, setIsSavingHomeDescription, 'toast.homeDescriptionSaved', 'toast.homeDescriptionSavedDescription', 'toast.errorSavingHomeDescription', 'toast.errorSavingHomeDescriptionDescription')} 
+                onClick={() => handleSaveCustomText('homePageDescription', homeDescriptionInput, 'toast.homeDescriptionSaved', 'toast.homeDescriptionSavedDescription', 'toast.errorSavingHomeDescription', 'toast.errorSavingHomeDescriptionDescription')} 
                 className="w-full" 
-                disabled={isLoadingCustomTexts || isSavingHomeDescription}>
-                <CurrentIcon isLoading={isSavingHomeDescription} /> {t('admin.dashboard.saveHomePageDescriptionButton')}
+                disabled={isLoadingCustomTexts || isSavingCustomTexts['homePageDescription']}>
+                <CurrentIcon isLoading={isSavingCustomTexts['homePageDescription'] || false} /> {t('admin.dashboard.saveHomePageDescriptionButton')}
               </Button>
             </CardFooter>
           </Card>
@@ -408,15 +456,15 @@ export default function AdminDashboardPage() {
             <CardContent className="space-y-2 py-4">
               <Label htmlFor="homeIntroText">{t('admin.dashboard.introTextLabel')}</Label>
               {isLoadingCustomTexts ? (  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />  ) : (
-                <Textarea id="homeIntroText" value={homeIntroTextInput} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setHomeIntroTextInput(e.target.value)} placeholder={defaultTexts.homeIntro} rows={5} className="text-sm" />
+                <Textarea id="homeIntroText" value={homeIntroTextInput} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setHomeIntroTextInput(e.target.value)} placeholder={defaultLocalizedTexts.homePageIntroText} rows={5} className="text-sm" />
               )}
             </CardContent>
             <CardFooter className="border-t pt-4">
               <Button 
-                onClick={() => handleSaveCustomText('homePageIntroText', homeIntroTextInput, setIsSavingHomeIntro, 'toast.homeIntroSaved', 'toast.homeIntroSavedDescription', 'toast.errorSavingHomeIntro', 'toast.errorLoadingHomeIntroDescription')} 
+                onClick={() => handleSaveCustomText('homePageIntroText', homeIntroTextInput, 'toast.homeIntroSaved', 'toast.homeIntroSavedDescription', 'toast.errorSavingHomeIntro', 'toast.errorSavingHomeIntroDescription')} 
                 className="w-full" 
-                disabled={isLoadingCustomTexts || isSavingHomeIntro}>
-                <CurrentIcon isLoading={isSavingHomeIntro} /> {t('admin.dashboard.saveHomeIntroButton')}
+                disabled={isLoadingCustomTexts || isSavingCustomTexts['homePageIntroText']}>
+                <CurrentIcon isLoading={isSavingCustomTexts['homePageIntroText'] || false} /> {t('admin.dashboard.saveHomeIntroButton')}
               </Button>
             </CardFooter>
           </Card>
@@ -426,15 +474,15 @@ export default function AdminDashboardPage() {
             <CardContent className="space-y-2 py-4">
               <Label htmlFor="voteIntroText">{t('admin.dashboard.introTextLabel')}</Label>
               {isLoadingCustomTexts ? ( <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> ): (
-                <Textarea id="voteIntroText" value={voteIntroTextInput} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setVoteIntroTextInput(e.target.value)} placeholder={defaultTexts.voteIntro} rows={4} className="text-sm" />
+                <Textarea id="voteIntroText" value={voteIntroTextInput} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setVoteIntroTextInput(e.target.value)} placeholder={defaultLocalizedTexts.votePageIntroText} rows={4} className="text-sm" />
               )}
             </CardContent>
             <CardFooter className="border-t pt-4">
               <Button 
-                onClick={() => handleSaveCustomText('votePageIntroText', voteIntroTextInput, setIsSavingVoteIntro, 'toast.voteIntroSaved', 'toast.voteIntroSavedDescription', 'toast.errorSavingVoteIntro', 'toast.errorLoadingVoteIntroDescription')} 
+                onClick={() => handleSaveCustomText('votePageIntroText', voteIntroTextInput, 'toast.voteIntroSaved', 'toast.voteIntroSavedDescription', 'toast.errorSavingVoteIntro', 'toast.errorSavingVoteIntroDescription')} 
                 className="w-full" 
-                disabled={isLoadingCustomTexts || isSavingVoteIntro}>
-                <CurrentIcon isLoading={isSavingVoteIntro} /> {t('admin.dashboard.saveVoteIntroButton')}
+                disabled={isLoadingCustomTexts || isSavingCustomTexts['votePageIntroText']}>
+                <CurrentIcon isLoading={isSavingCustomTexts['votePageIntroText'] || false} /> {t('admin.dashboard.saveVoteIntroButton')}
               </Button>
             </CardFooter>
           </Card>

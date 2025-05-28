@@ -7,15 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit3, AlertTriangle, CalendarClock, ToggleLeft, ToggleRight, UserCheck, Users, CheckSquare, Square } from 'lucide-react';
+import { PlusCircle, Trash2, Edit3, AlertTriangle, CalendarClock, ToggleLeft, ToggleRight, UserCheck, Users, CheckSquare, Square, Loader2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll, PollCandidate } from '@/lib/types';
 import Image from 'next/image';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
-
-const POLLS_STORAGE_KEY = 'eVote_polls_list';
 
 export default function EditPollPage() {
   const router = useRouter();
@@ -36,62 +34,63 @@ export default function EditPollPage() {
   const [maxVotesPerClient, setMaxVotesPerClient] = useState(1);
   const [isMultiSelect, setIsMultiSelect] = useState(false);
   const [maxSelections, setMaxSelections] = useState(1);
+  const [originalVotes, setOriginalVotes] = useState<{ [candidateId: string]: number }>({});
+
 
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingPoll, setIsFetchingPoll] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const isAuthenticated = localStorage.getItem('isAdminAuthenticated') === 'true';
-    if (!isAuthenticated) {
-      router.push('/admin');
-      return;
-    }
-
-    if (pollId) {
-      setIsFetchingPoll(true);
+    async function fetchUserAndPollData() {
       try {
-        const existingPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
-        const existingPolls: Poll[] = existingPollsRaw ? JSON.parse(existingPollsRaw) : [];
-        const pollToEdit = existingPolls.find(p => p.id === pollId);
+        const userRes = await fetch('/api/user');
+        const userData = await userRes.json();
+        if (!userData.isAdmin) {
+          router.push('/admin');
+          return;
+        }
+        setIsAuthLoading(false);
 
-        if (pollToEdit) {
+        if (pollId) {
+          setIsFetchingPoll(true);
+          const pollRes = await fetch(`/api/polls/${pollId}`);
+          if (!pollRes.ok) {
+            if (pollRes.status === 404) throw new Error('Poll not found');
+            throw new Error('Failed to fetch poll');
+          }
+          const pollToEdit: Poll = await pollRes.json();
+
           setOriginalPoll(pollToEdit);
           setPollTitle(pollToEdit.title);
           setCandidates(pollToEdit.candidates.map(c => ({...c}))); 
           setIsOpen(pollToEdit.isOpen);
-          setScheduledCloseTime(pollToEdit.scheduledCloseTime ? format(new Date(pollToEdit.scheduledCloseTime), "yyyy-MM-dd'T'HH:mm") : '');
+          setScheduledCloseTime(pollToEdit.scheduledCloseTime ? format(parseISO(pollToEdit.scheduledCloseTime), "yyyy-MM-dd'T'HH:mm") : '');
           setVoteLimitEnabled(pollToEdit.voteLimitEnabled || false);
           setMaxVotesPerClient(pollToEdit.maxVotesPerClient || 1);
           setIsMultiSelect(pollToEdit.isMultiSelect || false);
           setMaxSelections(pollToEdit.maxSelections || 1);
+          setOriginalVotes(pollToEdit.votes || {});
+
         } else {
-          toast({
-            title: t('toast.pollNotFound'),
-            description: t('toast.pollNotFoundDescription', { pollId }),
-            variant: "destructive",
-          });
-          router.push('/admin/dashboard');
+           toast({ title: t('toast.invalidPollId'), description: t('toast.invalidPollIdDescription'), variant: "destructive" });
+           router.push('/admin/dashboard');
         }
       } catch (error) {
         console.error("Failed to load poll for editing:", error);
-        toast({
-          title: t('toast.errorLoadingPoll'),
-          description: t('toast.errorLoadingPollDescription'),
-          variant: "destructive",
-        });
+        const message = error instanceof Error ? error.message : t('toast.errorLoadingPollDescription');
+        if (message === 'Poll not found') {
+             toast({ title: t('toast.pollNotFound'), description: t('toast.pollNotFoundDescription', { pollId }), variant: "destructive" });
+        } else {
+             toast({ title: t('toast.errorLoadingPoll'), description: message, variant: "destructive" });
+        }
         router.push('/admin/dashboard');
       } finally {
         setIsFetchingPoll(false);
       }
-    } else {
-      toast({
-        title: t('toast.invalidPollId'),
-        description: t('toast.invalidPollIdDescription'),
-        variant: "destructive",
-      });
-      router.push('/admin/dashboard');
     }
+    fetchUserAndPollData();
   }, [pollId, router, toast, t]);
 
   const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -111,11 +110,7 @@ export default function EditPollPage() {
 
   const handleAddCandidate = async () => {
     if (!currentCandidateName.trim()) {
-      toast({
-        title: t('toast.candidateNameEmpty'),
-        description: t('toast.candidateNameEmptyDescription'),
-        variant: "destructive",
-      });
+      toast({ title: t('toast.candidateNameEmpty'), description: t('toast.candidateNameEmptyDescription'), variant: "destructive" });
       return;
     }
 
@@ -133,16 +128,12 @@ export default function EditPollPage() {
         dataAiHint = 'uploaded avatar';
       } catch (error) {
         console.error("Error reading avatar file:", error);
-        toast({
-          title: t('toast.avatarUploadError'),
-          description: t('toast.avatarUploadErrorDescription'),
-          variant: "destructive",
-        });
+        toast({ title: t('toast.avatarUploadError'), description: t('toast.avatarUploadErrorDescription'), variant: "destructive" });
       }
     }
 
     const newCandidate: PollCandidate = {
-      id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+      id: `${Date.now()}${Math.random().toString(36).substring(2, 9)}`,
       name: currentCandidateName.trim(),
       avatarUrl,
       dataAiHint,
@@ -160,105 +151,72 @@ export default function EditPollPage() {
     setCandidates(prev => prev.filter(c => c.id !== candidateId));
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!pollTitle.trim()) {
-      toast({ title: t('toast.pollTitleEmpty'), description: t('toast.pollTitleEmptyDescription'), variant: "destructive" });
-      return;
-    }
-    if (candidates.length < 2) {
-      toast({ title: t('toast.notEnoughCandidates'), description: t('toast.notEnoughCandidatesDescription'), variant: "destructive" });
-      return;
-    }
-     if (voteLimitEnabled && maxVotesPerClient < 1) {
-      toast({
-        title: t('toast.invalidVoteLimit'),
-        description: t('toast.invalidVoteLimitDescription'),
-        variant: "destructive",
-      });
-      return;
-    }
-    if (isMultiSelect && maxSelections < 1) {
-      toast({
-        title: t('toast.invalidMaxSelections'),
-        description: t('toast.invalidMaxSelectionsDescription'),
-        variant: "destructive",
-      });
-      return;
-    }
-    if (isMultiSelect && maxSelections > candidates.length) {
-        toast({
-            title: t('toast.invalidMaxSelectionsTooLarge'),
-            description: t('toast.invalidMaxSelectionsTooLargeDescription'),
-            variant: "destructive",
-        });
-        return;
-    }
-    if (!originalPoll) {
-         toast({ title: t('toast.errorSavingPoll'), description: t('toast.errorSavingPollOriginalNotFoundDescription'), variant: "destructive" });
-        return;
-    }
+    if (!pollTitle.trim()) { toast({ title: t('toast.pollTitleEmpty'), description: t('toast.pollTitleEmptyDescription'), variant: "destructive" }); return; }
+    if (candidates.length < 2) { toast({ title: t('toast.notEnoughCandidates'), description: t('toast.notEnoughCandidatesDescription'), variant: "destructive" }); return; }
+    if (voteLimitEnabled && maxVotesPerClient < 1) { toast({ title: t('toast.invalidVoteLimit'), description: t('toast.invalidVoteLimitDescription'), variant: "destructive" }); return; }
+    if (isMultiSelect && maxSelections < 1) { toast({ title: t('toast.invalidMaxSelections'), description: t('toast.invalidMaxSelectionsDescription'), variant: "destructive" }); return; }
+    if (isMultiSelect && maxSelections > candidates.length) { toast({ title: t('toast.invalidMaxSelectionsTooLarge'), description: t('toast.invalidMaxSelectionsTooLargeDescription'), variant: "destructive" }); return; }
+    if (!originalPoll) { toast({ title: t('toast.errorSavingPoll'), description: t('toast.errorSavingPollOriginalNotFoundDescription'), variant: "destructive" }); return; }
 
     setIsLoading(true);
 
-    const updatedPoll: Poll = {
-      ...originalPoll,
+    // Preserve original votes for existing candidates
+    const updatedVotes: { [candidateId: string]: number } = {};
+    const currentCandidateIds = new Set(candidates.map(c => c.id));
+    for (const candId in originalVotes) {
+      if (currentCandidateIds.has(candId)) {
+        updatedVotes[candId] = originalVotes[candId];
+      }
+    }
+    // New candidates will have 0 votes implicitly (or handled by backend if structure differs)
+
+    const updatedPollPayload: Poll = {
+      id: originalPoll.id,
       title: pollTitle.trim(),
       candidates,
       isOpen,
       scheduledCloseTime: scheduledCloseTime ? new Date(scheduledCloseTime).toISOString() : null,
       voteLimitEnabled,
-      maxVotesPerClient: voteLimitEnabled ? maxVotesPerClient : undefined,
+      maxVotesPerClient: voteLimitEnabled ? maxVotesPerClient : 1,
       isMultiSelect,
       maxSelections: isMultiSelect ? maxSelections : 1,
-      votes: originalPoll.votes || {}, 
+      votes: updatedVotes,
     };
-
-    const currentCandidateIds = new Set(candidates.map(c => c.id));
-    const reconciledVotes: { [candidateId: string]: number } = {};
-    for (const candidateId in updatedPoll.votes) {
-      if (currentCandidateIds.has(candidateId)) {
-        reconciledVotes[candidateId] = updatedPoll.votes[candidateId];
-      }
-    }
-    updatedPoll.votes = reconciledVotes;
-
+    
     try {
-      const existingPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
-      let existingPolls: Poll[] = existingPollsRaw ? JSON.parse(existingPollsRaw) : [];
-      const pollIndex = existingPolls.findIndex(p => p.id === pollId);
+      const response = await fetch(`/api/polls/${pollId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPollPayload),
+      });
 
-      if (pollIndex !== -1) {
-        existingPolls[pollIndex] = updatedPoll;
-        localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(existingPolls));
-        toast({ title: t('toast.pollUpdatedSuccess'), description: t('toast.pollUpdatedSuccessDescription', { title: updatedPoll.title }) });
-        router.push('/admin/dashboard');
-      } else {
-         toast({ title: t('toast.errorSavingPoll'), description: t('toast.errorSavingPollNotFoundInStorageDescription'), variant: "destructive" });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update poll');
       }
+      toast({ title: t('toast.pollUpdatedSuccess'), description: t('toast.pollUpdatedSuccessDescription', { title: updatedPollPayload.title }) });
+      router.push('/admin/dashboard');
     } catch (error) {
       console.error("Failed to save updated poll:", error);
-      toast({ title: t('toast.errorSavingPoll'), description: t('toast.errorSavingPollDescription'), variant: "destructive" });
+      const message = error instanceof Error ? error.message : t('toast.errorSavingPollDescription');
+      toast({ title: t('toast.errorSavingPoll'), description: message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isFetchingPoll) {
+  if (isAuthLoading || isFetchingPoll) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-15rem)] py-10">
-        <Card className="w-full max-w-md text-center">
-          <CardHeader>
-            <Edit3 className="h-12 w-12 text-primary mx-auto mb-3 animate-pulse" />
-            <CardTitle className="text-2xl">{t('admin.editPoll.loadingTitle')}</CardTitle>
-          </CardHeader>
-          <CardContent><p>{t('admin.editPoll.loadingDescription')}</p></CardContent>
-        </Card>
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-2">{isAuthLoading ? t('admin.authLoading') : t('admin.editPoll.loadingDescription')}</p>
       </div>
     );
   }
 
-  if (!originalPoll && !isFetchingPoll) {
+  if (!originalPoll && !isFetchingPoll && !isAuthLoading) {
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-15rem)] py-10">
         <Card className="w-full max-w-md text-center">
@@ -308,7 +266,7 @@ export default function EditPollPage() {
                 <Label htmlFor="scheduledCloseTime" className="text-sm flex items-center gap-1">
                   <CalendarClock className="h-4 w-4" /> {t('admin.createPoll.scheduledCloseTimeLabel')}
                 </Label>
-                <Input id="scheduledCloseTime" type="datetime-local" value={scheduledCloseTime} onChange={(e) => setScheduledCloseTime(e.target.value)} className="text-sm" />
+                <Input id="scheduledCloseTime" type="datetime-local" value={scheduledCloseTime} onChange={(e) => setScheduledCloseTime(e.target.value)} className="text-sm" min={new Date().toISOString().slice(0, 16)} />
                 <p className="text-xs text-muted-foreground">{t('admin.createPoll.scheduledCloseTimeDescription')}</p>
                 {scheduledCloseTime && new Date(scheduledCloseTime) < new Date() && isOpen && (
                     <p className="text-xs text-destructive">{t('admin.editPoll.scheduledCloseTimeWarningPast')}</p>
@@ -426,5 +384,3 @@ export default function EditPollPage() {
     </div>
   );
 }
-
-    

@@ -12,33 +12,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext'; 
 
-const POLLS_STORAGE_KEY = 'eVote_polls_list'; 
 const CLIENT_POLL_VOTES_KEY = 'eVote_clientPollVotes'; 
-const getCustomTextKey = (baseKey: string, locale: string) => `eVote_${baseKey}_${locale}`;
 
+interface CustomTextsForLocale {
+  votePageIntroText?: string;
+}
 
-const checkAndUpdatePollStatusesClient = (polls: Poll[]): { updatedPolls: Poll[], wasChanged: boolean } => {
+const checkPollStatusClient = (poll: Poll): Poll => {
   const now = new Date();
-  let wasChanged = false;
-  const updatedPolls = polls.map(poll => {
-    if (poll.isOpen && poll.scheduledCloseTime) {
-      const closeTime = parseISO(poll.scheduledCloseTime); 
-      if (now >= closeTime) {
-        wasChanged = true;
-        return { ...poll, isOpen: false };
-      }
-    }
-    return poll;
-  });
-
-  if (wasChanged) {
-    try {
-      localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(updatedPolls));
-    } catch (error) {
-        console.error("Error auto-updating poll statuses in localStorage (vote page):", error);
+  if (poll.isOpen && poll.scheduledCloseTime) {
+    const closeTime = parseISO(poll.scheduledCloseTime); 
+    if (now >= closeTime) {
+      return { ...poll, isOpen: false };
     }
   }
-  return { updatedPolls, wasChanged };
+  return poll;
 };
 
 const getClientPollVotes = (): { [pollId: string]: number } => {
@@ -64,68 +52,66 @@ const saveClientPollVote = (pollId: string) => {
 
 export default function VotePage() {
   const { t, locale } = useLanguage(); 
-  const defaultVotePageIntro = t('votePage.defaultIntro'); 
+  const defaultVotePageIntroText = t('votePage.defaultIntro'); 
 
   const [allPolls, setAllPolls] = useState<Poll[]>([]);
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true); 
-  const [isLoadingTexts, setIsLoadingTexts] = useState(true); 
   const [introText, setIntroText] = useState('');
   const [clientVotes, setClientVotes] = useState<{ [pollId: string]: number }>({});
   const router = useRouter();
   const { toast } = useToast();
 
-  const loadPollData = useCallback(() => {
+  const loadPageData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
-      let polls: Poll[] = storedPollsRaw ? JSON.parse(storedPollsRaw) : [];
+      // Fetch custom texts
+      const settingsRes = await fetch('/api/settings');
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        const currentLocaleCustomTexts: CustomTextsForLocale = settingsData.customTexts?.[locale] || {};
+        setIntroText(currentLocaleCustomTexts.votePageIntroText || defaultVotePageIntroText);
+      } else {
+        setIntroText(defaultVotePageIntroText);
+      }
+
+      // Fetch polls
+      const pollsRes = await fetch('/api/polls');
+      if (!pollsRes.ok) throw new Error('Failed to fetch polls');
+      let fetchedPolls: Poll[] = await pollsRes.json();
       
-      const { updatedPolls, wasChanged } = checkAndUpdatePollStatusesClient(polls);
-      setAllPolls(updatedPolls);
+      const upToDatePolls = fetchedPolls.map(checkPollStatusClient);
+      setAllPolls(upToDatePolls);
       setClientVotes(getClientPollVotes());
 
-      if (updatedPolls.length === 1 && !selectedPoll) { 
-        setSelectedPoll(updatedPolls[0]);
-      } else if (updatedPolls.length === 0) {
+      // Auto-select poll if only one exists or if selectedPoll was closed
+      if (upToDatePolls.length === 1 && !selectedPoll) { 
+        setSelectedPoll(upToDatePolls[0]);
+      } else if (upToDatePolls.length === 0) {
         setSelectedPoll(null);
-      }
-      
-      if (wasChanged && selectedPoll) {
-          const refreshedSelectedPoll = updatedPolls.find(p => p.id === selectedPoll.id);
+      } else if (selectedPoll) {
+          const refreshedSelectedPoll = upToDatePolls.find(p => p.id === selectedPoll.id);
           if (refreshedSelectedPoll) {
               setSelectedPoll(refreshedSelectedPoll);
           } else {
-              setSelectedPoll(null); 
+              setSelectedPoll(null); // Selected poll might have been deleted
           }
       }
 
     } catch (error) {
-      console.error("Error loading poll data from localStorage:", error);
+      console.error("Error loading vote page data:", error);
       setAllPolls([]);
       setSelectedPoll(null);
+      setIntroText(defaultVotePageIntroText);
       toast({ title: t('toast.errorLoadingData'), description: t('toast.errorLoadingDataDescription'), variant: "destructive" });
     }
     setIsLoading(false);
-  }, [toast, selectedPoll, t]); 
-
-  const loadVotePageTexts = useCallback(() => {
-    setIsLoadingTexts(true);
-    try {
-      const storedIntro = localStorage.getItem(getCustomTextKey('votePageIntroText', locale));
-      setIntroText(storedIntro || defaultVotePageIntro);
-    } catch (error) {
-      console.error("Error loading vote page intro from localStorage:", error);
-      setIntroText(defaultVotePageIntro);
-    }
-    setIsLoadingTexts(false);
-  }, [locale, defaultVotePageIntro]);
+  }, [locale, defaultVotePageIntroText, selectedPoll, t, toast]); 
 
   useEffect(() => {
-    loadPollData();
-    loadVotePageTexts();
-  }, [loadPollData, loadVotePageTexts]); // locale change is handled by loadVotePageTexts dependency on locale
+    loadPageData();
+  }, [loadPageData]); 
 
   const handleSelectCandidate = (candidateId: string) => {
     if (!selectedPoll) return;
@@ -156,13 +142,17 @@ export default function VotePage() {
     setSelectedCandidateIds([]); 
   };
 
-  const handleSubmitVote = () => {
+  const handleSubmitVote = async () => {
     if (selectedCandidateIds.length === 0 || !selectedPoll) {
       toast({ title: t('toast.selectionRequired'), description: t('toast.selectionRequiredDescription'), variant: "destructive" });
       return;
     }
-    if (!selectedPoll.isOpen) {
+    
+    // Re-check poll status before submitting
+    const currentPollState = checkPollStatusClient(selectedPoll);
+    if (!currentPollState.isOpen) {
       toast({ title: t('toast.pollClosed'), description: t('toast.pollClosedDescription'), variant: "destructive" });
+      setSelectedPoll(currentPollState); // Update UI if status changed
       return;
     }
 
@@ -181,32 +171,22 @@ export default function VotePage() {
     }
     
     try {
-      const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
-      let pollsFromStorage: Poll[] = storedPollsRaw ? JSON.parse(storedPollsRaw) : [];
-      const pollIndex = pollsFromStorage.findIndex(p => p.id === selectedPoll.id);
-
-      if (pollIndex === -1) {
-        toast({ title: t('toast.errorRecordingVotePollNotFound'), description: t('toast.errorRecordingVotePollNotFoundDescription'), variant: "destructive" });
-        return;
-      }
-      
-      const currentPollState = pollsFromStorage[pollIndex];
-      if (!currentPollState.isOpen) {
-          toast({ title: t('toast.pollJustClosed'), description: t('toast.pollJustClosedDescription'), variant: "destructive" });
-          loadPollData(); 
-          return;
-      }
-
-      const updatedPoll = { ...currentPollState };
-      if (!updatedPoll.votes) updatedPoll.votes = {};
-
-      selectedCandidateIds.forEach(candidateId => {
-        updatedPoll.votes[candidateId] = (updatedPoll.votes[candidateId] || 0) + 1;
+      const response = await fetch(`/api/polls/${selectedPoll.id}/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidateIds: selectedCandidateIds }),
       });
-      
-      pollsFromStorage[pollIndex] = updatedPoll;
-      localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(pollsFromStorage));
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (response.status === 403 && errorData.message === 'Poll is closed') {
+            toast({ title: t('toast.pollJustClosed'), description: t('toast.pollJustClosedDescription'), variant: "destructive" });
+            loadPageData(); // Refresh poll data
+            return;
+        }
+        throw new Error(errorData.message || 'Failed to submit vote');
+      }
+      
       if (selectedPoll.voteLimitEnabled) {
         saveClientPollVote(selectedPoll.id);
         setClientVotes(getClientPollVotes()); 
@@ -224,13 +204,14 @@ export default function VotePage() {
       router.push(`/results?pollId=${selectedPoll.id}`);
 
     } catch (error) {
-      console.error("Error saving vote to localStorage:", error);
-      toast({ title: t('toast.errorSavingVote'), description: t('toast.errorSavingPollDescription'), variant: "destructive" });
+      console.error("Error saving vote:", error);
+      const message = error instanceof Error ? error.message : t('toast.errorSavingVoteDescription');
+      toast({ title: t('toast.errorSavingVote'), description: message, variant: "destructive" });
     }
   };
   
 
-  if (isLoading || isLoadingTexts) {
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-10">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -255,59 +236,60 @@ export default function VotePage() {
       <div className="flex flex-col items-center space-y-8 py-8">
         <div className="text-center space-y-3">
             <h1 className="text-4xl font-bold tracking-tight text-primary">{t('votePage.selectPollTitle')}</h1>
-            <p className="text-lg text-muted-foreground max-w-2xl whitespace-pre-line">{t('votePage.pollList.introText')}</p>
+            <p className="text-lg text-muted-foreground max-w-2xl whitespace-pre-line">{introText || t('votePage.pollList.introText')}</p>
         </div>
         <Card className="w-full max-w-2xl shadow-xl">
           <CardHeader><CardTitle className="text-2xl flex items-center gap-2"><ListChecks /> {t('votePage.availablePollsTitle')}</CardTitle><CardDescription>{t('votePage.availablePollsDescription')}</CardDescription></CardHeader>
           <CardContent className="space-y-3">
             {allPolls.map(poll => {
-                let statusTextKey = poll.isOpen ? 'votePage.pollList.statusOpen' : 'votePage.pollList.statusClosed';
-                let statusColor = poll.isOpen ? 'text-green-600' : 'text-red-600';
-                let StatusIcon = poll.isOpen ? Unlock : Lock;
+                const currentPollChecked = checkPollStatusClient(poll); // Ensure status is up-to-date for display
+                let statusTextKey = currentPollChecked.isOpen ? 'votePage.pollList.statusOpen' : 'votePage.pollList.statusClosed';
+                let statusColor = currentPollChecked.isOpen ? 'text-green-600' : 'text-red-600';
+                let StatusIcon = currentPollChecked.isOpen ? Unlock : Lock;
                 let statusTextParam = {};
 
-                if (poll.isOpen && poll.scheduledCloseTime) {
-                    const closeTime = parseISO(poll.scheduledCloseTime);
+                if (currentPollChecked.isOpen && currentPollChecked.scheduledCloseTime) {
+                    const closeTime = parseISO(currentPollChecked.scheduledCloseTime);
                      if (new Date() < closeTime) {
                         statusTextKey = 'votePage.pollList.statusOpenUntil';
                         statusTextParam = { time: format(closeTime, 'MMM d, p') };
-                     } else { 
+                     } else { // Should have been caught by checkPollStatusClient, but as a fallback
                         statusTextKey = 'votePage.pollList.statusClosed'; 
                         StatusIcon = Lock; statusColor = 'text-red-600';
                      }
-                } else if (!poll.isOpen && poll.scheduledCloseTime) {
+                } else if (!currentPollChecked.isOpen && currentPollChecked.scheduledCloseTime) {
                     statusTextKey = 'votePage.pollList.statusClosedAt';
-                    statusTextParam = { time: format(parseISO(poll.scheduledCloseTime), 'MMM d, p') };
+                    statusTextParam = { time: format(parseISO(currentPollChecked.scheduledCloseTime), 'MMM d, p') };
                 }
                 
                 let limitText = "";
-                if(poll.voteLimitEnabled){
-                    const votesAlreadyCast = clientVotes[poll.id] || 0;
-                    const maxAllowed = poll.maxVotesPerClient || 1;
+                if(currentPollChecked.voteLimitEnabled){
+                    const votesAlreadyCast = clientVotes[currentPollChecked.id] || 0;
+                    const maxAllowed = currentPollChecked.maxVotesPerClient || 1;
                     if(votesAlreadyCast >= maxAllowed) {
                         limitText = t('votePage.pollList.voteLimitReached', { maxAllowed: maxAllowed.toString() });
                     } else {
                         limitText = t('votePage.pollList.votesRemaining', { remaining: (maxAllowed - votesAlreadyCast).toString(), maxAllowed: maxAllowed.toString() });
                     }
                 }
-                const pollTypeKey = poll.isMultiSelect ? 'votePage.pollList.pollTypeMultiSelect' : 'votePage.pollList.pollTypeSingleSelect';
-                const pollTypeParams = poll.isMultiSelect ? { maxSelections: (poll.maxSelections || 1).toString() } : {};
+                const pollTypeKey = currentPollChecked.isMultiSelect ? 'votePage.pollList.pollTypeMultiSelect' : 'votePage.pollList.pollTypeSingleSelect';
+                const pollTypeParams = currentPollChecked.isMultiSelect ? { maxSelections: (currentPollChecked.maxSelections || 1).toString() } : {};
 
 
               return (
                 <Button
-                  key={poll.id}
+                  key={currentPollChecked.id}
                   variant="outline"
                   className="w-full justify-between p-6 text-left h-auto shadow-sm hover:shadow-md flex flex-col sm:flex-row items-start sm:items-center"
-                  onClick={() => handleSelectPoll(poll)}
+                  onClick={() => handleSelectPoll(currentPollChecked)}
                 >
                   <div className="flex-grow mb-2 sm:mb-0">
-                      <span className="text-lg font-semibold text-foreground">{poll.title}</span>
+                      <span className="text-lg font-semibold text-foreground">{currentPollChecked.title}</span>
                        <div className={`text-xs flex items-center gap-1 ${statusColor}`}>
                           <StatusIcon className="h-3.5 w-3.5" /> {t(statusTextKey, statusTextParam)}
                       </div>
-                      <span className="text-xs text-muted-foreground block">{t('votePage.pollList.candidateCount', { count: poll.candidates.length.toString() })} - {t(pollTypeKey, pollTypeParams)}</span>
-                      {poll.voteLimitEnabled && limitText && <span className="text-xs text-blue-600 block">{limitText}</span>}
+                      <span className="text-xs text-muted-foreground block">{t('votePage.pollList.candidateCount', { count: currentPollChecked.candidates.length.toString() })} - {t(pollTypeKey, pollTypeParams)}</span>
+                      {currentPollChecked.voteLimitEnabled && limitText && <span className="text-xs text-blue-600 block">{limitText}</span>}
                   </div>
                   <ChevronRight className="h-5 w-5 text-primary flex-shrink-0 self-center" />
                 </Button>
@@ -321,16 +303,16 @@ export default function VotePage() {
 
   let votesCastByClientForSelectedPoll = 0;
   let maxVotesForSelectedPoll = 1;
-  let voteLimitReached = false;
+  let voteLimitReachedForSelectedPoll = false;
 
   if (selectedPoll.voteLimitEnabled) {
     votesCastByClientForSelectedPoll = clientVotes[selectedPoll.id] || 0;
     maxVotesForSelectedPoll = selectedPoll.maxVotesPerClient || 1;
     if (votesCastByClientForSelectedPoll >= maxVotesForSelectedPoll) {
-      voteLimitReached = true;
+      voteLimitReachedForSelectedPoll = true;
     }
   }
-  const canSubmitVote = selectedCandidateIds.length > 0 && selectedPoll.isOpen && (!selectedPoll.voteLimitEnabled || !voteLimitReached);
+  const canSubmitVote = selectedCandidateIds.length > 0 && selectedPoll.isOpen && (!selectedPoll.voteLimitEnabled || !voteLimitReachedForSelectedPoll);
 
 
   return (
@@ -339,7 +321,7 @@ export default function VotePage() {
         <h1 className="text-4xl font-bold tracking-tight text-primary">{selectedPoll.title}</h1>
         <p className="text-lg text-muted-foreground max-w-2xl whitespace-pre-line">{introText}</p>
          {allPolls.length > 1 && (
-            <Button variant="link" onClick={() => { setSelectedPoll(null); setSelectedCandidateIds([]); loadPollData(); }} className="text-sm">{t('votePage.backToPollList')}</Button>
+            <Button variant="link" onClick={() => { setSelectedPoll(null); setSelectedCandidateIds([]); }} className="text-sm">{t('votePage.backToPollList')}</Button>
         )}
       </div>
       
@@ -376,21 +358,21 @@ export default function VotePage() {
       )}
 
       {selectedPoll.voteLimitEnabled && selectedPoll.isOpen && (
-        <Card className={`w-full max-w-lg text-center shadow-md ${voteLimitReached ? 'bg-amber-50 border-amber-400 dark:bg-amber-900/30 dark:border-amber-700' : 'bg-blue-50 border-blue-400 dark:bg-blue-900/30 dark:border-blue-700'}`}>
+        <Card className={`w-full max-w-lg text-center shadow-md ${voteLimitReachedForSelectedPoll ? 'bg-amber-50 border-amber-400 dark:bg-amber-900/30 dark:border-amber-700' : 'bg-blue-50 border-blue-400 dark:bg-blue-900/30 dark:border-blue-700'}`}>
             <CardHeader>
-                <CardTitle className={`flex items-center justify-center gap-2 text-lg ${voteLimitReached ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
-                   {voteLimitReached ? <ShieldAlert className="h-5 w-5" /> : <UserCheck className="h-5 w-5" />} 
-                   {voteLimitReached ? t('votePage.voteLimitReachedTitle') : t('votePage.voteLimitStatusTitle')}
+                <CardTitle className={`flex items-center justify-center gap-2 text-lg ${voteLimitReachedForSelectedPoll ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
+                   {voteLimitReachedForSelectedPoll ? <ShieldAlert className="h-5 w-5" /> : <UserCheck className="h-5 w-5" />} 
+                   {voteLimitReachedForSelectedPoll ? t('votePage.voteLimitReachedTitle') : t('votePage.voteLimitStatusTitle')}
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <p className={`text-sm ${voteLimitReached ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                <p className={`text-sm ${voteLimitReachedForSelectedPoll ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
                     {t('votePage.voteLimitDescription', { maxVotes: maxVotesForSelectedPoll.toString() })}
                 </p>
-                <p className={`text-sm font-semibold ${voteLimitReached ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
+                <p className={`text-sm font-semibold ${voteLimitReachedForSelectedPoll ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
                     {t('votePage.voteLimitStatus', {
                         votesCast: votesCastByClientForSelectedPoll.toString(),
-                        remainingText: voteLimitReached ? t('votePage.voteLimitStatusReached') : t('votePage.voteLimitStatusRemaining', { remainingCount: (maxVotesForSelectedPoll - votesCastByClientForSelectedPoll).toString() })
+                        remainingText: voteLimitReachedForSelectedPoll ? t('votePage.voteLimitStatusReached') : t('votePage.voteLimitStatusRemaining', { remainingCount: (maxVotesForSelectedPoll - votesCastByClientForSelectedPoll).toString() })
                     })}
                 </p>
                  <p className="text-xs text-muted-foreground mt-2">{t('votePage.voteLimitNote')}</p>
@@ -403,12 +385,12 @@ export default function VotePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8 w-full">
           {selectedPoll.candidates.map((candidate) => {
             const isSelected = selectedCandidateIds.includes(candidate.id);
-            let cardDisabled = !selectedPoll.isOpen || (selectedPoll.voteLimitEnabled && voteLimitReached);
+            let cardDisabled = !selectedPoll.isOpen || (selectedPoll.voteLimitEnabled && voteLimitReachedForSelectedPoll);
             if (selectedPoll.isMultiSelect && 
                 !isSelected && 
                 selectedCandidateIds.length >= (selectedPoll.maxSelections || 1) &&
                 selectedPoll.isOpen && 
-                !(selectedPoll.voteLimitEnabled && voteLimitReached) 
+                !(selectedPoll.voteLimitEnabled && voteLimitReachedForSelectedPoll) 
                 ) {
               cardDisabled = true;
             }
