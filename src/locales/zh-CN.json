@@ -1,0 +1,28 @@
+
+{
+  "header.eVote": "eVote电子投票",
+  "header.home": "首页",
+  "header.vote": "投票",
+  "header.results": "结果",
+  "header.admin": "管理后台",
+  "header.language.english": "English",
+  "header.language.chinese": "中文",
+
+  "home.title": "总统大选即将举行！",
+  "home.description": "您的声音至关重要。请务必投下您的一票，塑造未来。",
+  "home.defaultIntro": "我们高兴地宣布，下一次总统选举即将举行。这是您选择最能代表您利益的领导人的机会。准备好了解候选人并做出明智的决定。",
+  "home.votingPeriod": "投票时段：待宣布",
+  "home.proceedToVoting": "前往投票",
+
+  "admin.login.title": "管理员访问",
+  "admin.login.description": "输入密码以访问管理后台。",
+  "admin.login.passwordLabel": "密码",
+  "admin.login.button": "登录",
+  "admin.login.authenticating": "验证中...",
+  "admin.login.invalidPasswordError": "密码无效，请重试。",
+
+  "toast.accessGranted": "授权成功",
+  "toast.accessGrantedDescription": "正在跳转到管理员仪表盘...",
+  "toast.accessDenied": "授权失败",
+  "toast.accessDeniedDescription": "密码无效，请重试。"
+}

@@ -1,0 +1,28 @@
+
+{
+  "header.eVote": "eVote",
+  "header.home": "Home",
+  "header.vote": "Vote",
+  "header.results": "Results",
+  "header.admin": "Admin",
+  "header.language.english": "English",
+  "header.language.chinese": "中文",
+
+  "home.title": "Upcoming Presidential Election!",
+  "home.description": "Your voice matters. Make sure to cast your vote and shape the future.",
+  "home.defaultIntro": "We are pleased to announce that the next presidential election will be held soon. This is your opportunity to choose the leader who will best represent your interests. Prepare to learn about the candidates and make an informed decision.",
+  "home.votingPeriod": "Voting Period: To Be Announced",
+  "home.proceedToVoting": "Proceed to Voting",
+
+  "admin.login.title": "Admin Access",
+  "admin.login.description": "Enter the password to access the admin section.",
+  "admin.login.passwordLabel": "Password",
+  "admin.login.button": "Login",
+  "admin.login.authenticating": "Authenticating...",
+  "admin.login.invalidPasswordError": "Invalid password. Please try again.",
+
+  "toast.accessGranted": "Access Granted",
+  "toast.accessGrantedDescription": "Redirecting to admin dashboard...",
+  "toast.accessDenied": "Access Denied",
+  "toast.accessDeniedDescription": "Invalid password. Please try again."
+}

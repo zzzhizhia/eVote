@@ -10,11 +10,13 @@ import { Send, Info, ListChecks, ChevronRight, Lock, Unlock, UserCheck, ShieldAl
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { format, parseISO } from 'date-fns';
+import { useLanguage } from '@/contexts/LanguageContext'; // Added
 
 const POLLS_STORAGE_KEY = 'eVote_polls_list';
-const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText';
-const CLIENT_POLL_VOTES_KEY = 'eVote_clientPollVotes'; // Stores { [pollId]: count }
-const DEFAULT_VOTE_INTRO = "Review the candidates below and make your selection. Click on a candidate's card to select them, then submit your vote.";
+const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText_'; // Locale will be appended
+const CLIENT_POLL_VOTES_KEY = 'eVote_clientPollVotes'; 
+// DEFAULT_VOTE_INTRO is now from translations
+
 
 const checkAndUpdatePollStatusesClient = (polls: Poll[]): { updatedPolls: Poll[], wasChanged: boolean } => {
   const now = new Date();
@@ -62,6 +64,9 @@ const saveClientPollVote = (pollId: string) => {
 
 
 export default function VotePage() {
+  const { t, locale } = useLanguage(); // Added
+  const DEFAULT_VOTE_INTRO = t('vote.defaultIntro', {candidateName: ''}); // Placeholder for potential future use
+
   const [allPolls, setAllPolls] = useState<Poll[]>([]);
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
@@ -74,7 +79,8 @@ export default function VotePage() {
   const loadData = useCallback(() => {
     setIsLoading(true);
     try {
-      const storedIntro = localStorage.getItem(VOTE_PAGE_INTRO_TEXT_KEY);
+      const currentVotePageIntroKey = `${VOTE_PAGE_INTRO_TEXT_KEY}${locale}`;
+      const storedIntro = localStorage.getItem(currentVotePageIntroKey);
       setIntroText((storedIntro && storedIntro.trim() !== "") ? storedIntro : DEFAULT_VOTE_INTRO);
 
       const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
@@ -103,14 +109,26 @@ export default function VotePage() {
       console.error("Error loading data from localStorage:", error);
       setAllPolls([]);
       setSelectedPoll(null);
+      // TODO: Translate toast
       toast({ title: "Error Loading Data", description: "Could not load data. Please try again later.", variant: "destructive" });
     }
     setIsLoading(false);
-  }, [toast, selectedPoll]); 
+  }, [toast, selectedPoll, locale, DEFAULT_VOTE_INTRO]); 
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+  
+  // Effect to update introText if the default text itself changes due to language switch
+  // and no custom text is set.
+  useEffect(() => {
+    const currentVotePageIntroKey = `${VOTE_PAGE_INTRO_TEXT_KEY}${locale}`;
+    const storedIntro = localStorage.getItem(currentVotePageIntroKey);
+    if (!storedIntro || storedIntro.trim() === "") {
+       setIntroText(DEFAULT_VOTE_INTRO);
+    }
+  }, [DEFAULT_VOTE_INTRO, locale]);
+
 
   const handleSelectCandidate = (candidateId: string) => {
     if (!selectedPoll) return;
@@ -123,6 +141,7 @@ export default function VotePage() {
         } else if (prevSelectedIds.length < maxSelections) {
           return [...prevSelectedIds, candidateId];
         } else {
+          // TODO: Translate toast
           toast({
             title: "Selection Limit Reached",
             description: `You can only select up to ${maxSelections} candidate(s) for this poll.`,
@@ -144,15 +163,18 @@ export default function VotePage() {
 
   const handleSubmitVote = () => {
     if (selectedCandidateIds.length === 0 || !selectedPoll) {
+      // TODO: Translate toast
       toast({ title: "Selection Required", description: "Please select a poll and at least one candidate.", variant: "destructive" });
       return;
     }
     if (!selectedPoll.isOpen) {
+      // TODO: Translate toast
       toast({ title: "Poll Closed", description: "This poll is no longer accepting votes.", variant: "destructive" });
       return;
     }
 
     if (selectedPoll.isMultiSelect && selectedPoll.maxSelections && selectedCandidateIds.length > selectedPoll.maxSelections) {
+        // TODO: Translate toast
         toast({ title: "Too Many Selections", description: `You have selected more than the allowed ${selectedPoll.maxSelections} candidates.`, variant: "destructive" });
         return;
     }
@@ -161,6 +183,7 @@ export default function VotePage() {
       const votesCastByClient = clientVotes[selectedPoll.id] || 0;
       const maxVotes = selectedPoll.maxVotesPerClient || 1;
       if (votesCastByClient >= maxVotes) {
+        // TODO: Translate toast
         toast({ title: "Vote Limit Reached", description: `You have already cast the maximum of ${maxVotes} vote(s) for this poll.`, variant: "destructive" });
         return;
       }
@@ -172,12 +195,14 @@ export default function VotePage() {
       const pollIndex = pollsFromStorage.findIndex(p => p.id === selectedPoll.id);
 
       if (pollIndex === -1) {
+        // TODO: Translate toast
         toast({ title: "Error Recording Vote", description: "Selected poll not found.", variant: "destructive" });
         return;
       }
       
       const currentPollState = pollsFromStorage[pollIndex];
       if (!currentPollState.isOpen) {
+          // TODO: Translate toast
           toast({ title: "Poll Just Closed", description: "This poll is no longer accepting votes.", variant: "destructive" });
           loadData(); 
           return;
@@ -195,33 +220,59 @@ export default function VotePage() {
 
       if (selectedPoll.voteLimitEnabled) {
         saveClientPollVote(selectedPoll.id);
-        setClientVotes(getClientPollVotes()); // Refresh client votes state
+        setClientVotes(getClientPollVotes()); 
       }
       
       const votedForNames = selectedPoll.candidates
         .filter(c => selectedCandidateIds.includes(c.id))
         .map(c => c.name)
         .join(', ');
-
+      
+      // TODO: Translate toast
       toast({ title: "Vote Submitted!", description: `Your vote for ${votedForNames} in "${selectedPoll.title}" has been recorded.` });
       router.push(`/results?pollId=${selectedPoll.id}`);
 
     } catch (error) {
       console.error("Error saving vote to localStorage:", error);
+      // TODO: Translate toast
       toast({ title: "Error Saving Vote", description: "An unexpected error occurred.", variant: "destructive" });
     }
   };
+  
+  // TODO: Translate these texts
+  const loadingPollDataText = "Loading poll data...";
+  const noActivePollsTitle = "No Active Polls";
+  const noActivePollsDescription = "There are currently no active polls available for voting. Please check back later.";
+  const selectPollTitle = "Select a Poll to Vote";
+  const availablePollsTitle = "Available Polls";
+  const availablePollsDescription = "Click on a poll to see its candidates and cast your vote.";
+  const backToPollListText = "\u2190 Back to Poll List"; // ←
+  const pollClosedTitle = "Poll Closed";
+  const pollClosedDescription = "This poll is currently closed and not accepting new votes.";
+  const multiSelectTitle = "Multi-Select Poll";
+  const multiSelectDescription = "You can select up to {{maxSelections}} candidate(s).";
+  const multiSelectCurrentlySelected = "Currently selected: {{count}}";
+  const voteLimitStatusTitle = "Vote Limit Status";
+  const voteLimitReachedTitle = "Vote Limit Reached";
+  const voteLimitDescription = "This poll allows a maximum of {{maxVotes}} vote(s) per client.";
+  const voteLimitStatus = "You have cast {{votesCast}} vote(s). {{remainingText}}";
+  const voteLimitReachedText = "You cannot cast more votes.";
+  const voteLimitRemainingText = "You have {{remainingCount}} vote(s) remaining.";
+  const voteLimitNote = "Note: This limit is browser-based and can be bypassed.";
+  const noCandidatesText = "No candidates available for this poll.";
+  const submitVoteButtonText = "Submit Your Vote(s)";
+
 
   if (isLoading) {
-    return <div className="text-center py-10"><p className="text-lg text-muted-foreground">Loading poll data...</p></div>;
+    return <div className="text-center py-10"><p className="text-lg text-muted-foreground">{loadingPollDataText}</p></div>;
   }
 
   if (allPolls.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-12">
         <Card className="w-full max-w-lg text-center shadow-lg">
-          <CardHeader><div className="flex justify-center mb-3"><Info className="h-12 w-12 text-primary" /></div><CardTitle className="text-2xl">No Active Polls</CardTitle></CardHeader>
-          <CardContent><CardDescription className="text-base">There are currently no active polls available for voting. Please check back later.</CardDescription></CardContent>
+          <CardHeader><div className="flex justify-center mb-3"><Info className="h-12 w-12 text-primary" /></div><CardTitle className="text-2xl">{noActivePollsTitle}</CardTitle></CardHeader>
+          <CardContent><CardDescription className="text-base">{noActivePollsDescription}</CardDescription></CardContent>
         </Card>
       </div>
     );
@@ -231,11 +282,11 @@ export default function VotePage() {
     return (
       <div className="flex flex-col items-center space-y-8 py-8">
         <div className="text-center space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-primary">Select a Poll to Vote</h1>
+            <h1 className="text-4xl font-bold tracking-tight text-primary">{selectPollTitle}</h1>
             <p className="text-lg text-muted-foreground max-w-2xl whitespace-pre-line">{introText.replace("Review the candidates below", "Choose a poll from the list below, then review its candidates")}</p>
         </div>
         <Card className="w-full max-w-2xl shadow-xl">
-          <CardHeader><CardTitle className="text-2xl flex items-center gap-2"><ListChecks /> Available Polls</CardTitle><CardDescription>Click on a poll to see its candidates and cast your vote.</CardDescription></CardHeader>
+          <CardHeader><CardTitle className="text-2xl flex items-center gap-2"><ListChecks /> {availablePollsTitle}</CardTitle><CardDescription>{availablePollsDescription}</CardDescription></CardHeader>
           <CardContent className="space-y-3">
             {allPolls.map(poll => {
                 let statusText = poll.isOpen ? 'Open for voting' : 'Closed';
@@ -311,7 +362,7 @@ export default function VotePage() {
         <h1 className="text-4xl font-bold tracking-tight text-primary">{selectedPoll.title}</h1>
         <p className="text-lg text-muted-foreground max-w-2xl whitespace-pre-line">{introText}</p>
          {allPolls.length > 1 && (
-            <Button variant="link" onClick={() => { setSelectedPoll(null); setSelectedCandidateIds([]); loadData(); }} className="text-sm">&larr; Back to Poll List</Button>
+            <Button variant="link" onClick={() => { setSelectedPoll(null); setSelectedCandidateIds([]); loadData(); }} className="text-sm">{backToPollListText}</Button>
         )}
       </div>
       
@@ -319,51 +370,53 @@ export default function VotePage() {
         <Card className="w-full max-w-md text-center bg-destructive/10 border-destructive">
             <CardHeader>
                 <CardTitle className="text-destructive flex items-center justify-center gap-2">
-                    <Lock className="h-6 w-6"/> Poll Closed
+                    <Lock className="h-6 w-6"/> {pollClosedTitle}
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <p className="text-destructive-foreground">This poll is currently closed and not accepting new votes.</p>
+                <p className="text-destructive-foreground">{pollClosedDescription}</p>
                 {selectedPoll.scheduledCloseTime && <p className="text-sm text-muted-foreground mt-1">Closed at: {format(parseISO(selectedPoll.scheduledCloseTime), 'PPpp')}</p>}
             </CardContent>
         </Card>
       )}
 
       {selectedPoll.isMultiSelect && selectedPoll.isOpen && (
-         <Card className="w-full max-w-lg text-center shadow-md bg-blue-50 border-blue-400">
+         <Card className="w-full max-w-lg text-center shadow-md bg-blue-50 border-blue-400 dark:bg-blue-900/30 dark:border-blue-700">
             <CardHeader>
-                <CardTitle className="flex items-center justify-center gap-2 text-lg text-blue-700">
-                    <CheckSquare className="h-5 w-5"/> Multi-Select Poll
+                <CardTitle className="flex items-center justify-center gap-2 text-lg text-blue-700 dark:text-blue-300">
+                    <CheckSquare className="h-5 w-5"/> {multiSelectTitle}
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <p className="text-sm text-blue-600">
-                    You can select up to <span className="font-bold">{selectedPoll.maxSelections || 1}</span> candidate(s).
+                <p className="text-sm text-blue-600 dark:text-blue-400">
+                    {multiSelectDescription.replace('{{maxSelections}}', (selectedPoll.maxSelections || 1).toString())}
                 </p>
-                <p className="text-sm font-semibold text-blue-700">
-                    Currently selected: {selectedCandidateIds.length}
+                <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                    {multiSelectCurrentlySelected.replace('{{count}}', selectedCandidateIds.length.toString())}
                 </p>
             </CardContent>
         </Card>
       )}
 
       {selectedPoll.voteLimitEnabled && selectedPoll.isOpen && (
-        <Card className={`w-full max-w-lg text-center shadow-md ${voteLimitReached ? 'bg-amber-50 border-amber-400' : 'bg-blue-50 border-blue-400'}`}>
+        <Card className={`w-full max-w-lg text-center shadow-md ${voteLimitReached ? 'bg-amber-50 border-amber-400 dark:bg-amber-900/30 dark:border-amber-700' : 'bg-blue-50 border-blue-400 dark:bg-blue-900/30 dark:border-blue-700'}`}>
             <CardHeader>
-                <CardTitle className={`flex items-center justify-center gap-2 text-lg ${voteLimitReached ? 'text-amber-700' : 'text-blue-700'}`}>
+                <CardTitle className={`flex items-center justify-center gap-2 text-lg ${voteLimitReached ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
                    {voteLimitReached ? <ShieldAlert className="h-5 w-5" /> : <UserCheck className="h-5 w-5" />} 
-                   Vote Limit Status
+                   {voteLimitReached ? voteLimitReachedTitle : voteLimitStatusTitle}
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <p className={`text-sm ${voteLimitReached ? 'text-amber-600' : 'text-blue-600'}`}>
-                    This poll allows a maximum of {maxVotesForSelectedPoll} vote(s) per client.
+                <p className={`text-sm ${voteLimitReached ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                    {voteLimitDescription.replace('{{maxVotes}}', maxVotesForSelectedPoll.toString())}
                 </p>
-                <p className={`text-sm font-semibold ${voteLimitReached ? 'text-amber-700' : 'text-blue-700'}`}>
-                    You have cast {votesCastByClientForSelectedPoll} vote(s). 
-                    {voteLimitReached ? " You cannot cast more votes." : ` You have ${maxVotesForSelectedPoll - votesCastByClientForSelectedPoll} vote(s) remaining.`}
+                <p className={`text-sm font-semibold ${voteLimitReached ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
+                    {voteLimitStatus
+                        .replace('{{votesCast}}', votesCastByClientForSelectedPoll.toString())
+                        .replace('{{remainingText}}', voteLimitReached ? voteLimitReachedText : voteLimitRemainingText.replace('{{remainingCount}}', (maxVotesForSelectedPoll - votesCastByClientForSelectedPoll).toString()))
+                    }
                 </p>
-                 <p className="text-xs text-muted-foreground mt-2">Note: This limit is browser-based and can be bypassed.</p>
+                 <p className="text-xs text-muted-foreground mt-2">{voteLimitNote}</p>
             </CardContent>
         </Card>
       )}
@@ -377,8 +430,8 @@ export default function VotePage() {
             if (selectedPoll.isMultiSelect && 
                 !isSelected && 
                 selectedCandidateIds.length >= (selectedPoll.maxSelections || 1) &&
-                selectedPoll.isOpen && // only apply this specific disable if poll is open
-                !(selectedPoll.voteLimitEnabled && voteLimitReached) // and vote limit per client not reached
+                selectedPoll.isOpen && 
+                !(selectedPoll.voteLimitEnabled && voteLimitReached) 
                 ) {
               cardDisabled = true;
             }
@@ -390,12 +443,13 @@ export default function VotePage() {
                 onSelect={handleSelectCandidate}
                 isSelected={isSelected}
                 disabled={cardDisabled}
+                isMultiSelectPoll={selectedPoll.isMultiSelect}
               />
             );
           })}
         </div>
       ) : (
-        <p className="text-muted-foreground">No candidates available for this poll.</p>
+        <p className="text-muted-foreground">{noCandidatesText}</p>
       )}
 
       {selectedPoll.candidates.length > 0 && (
@@ -406,7 +460,7 @@ export default function VotePage() {
           className="mt-6 shadow-lg hover:shadow-xl transition-shadow min-w-[200px]"
         >
           <Send className="mr-2 h-5 w-5" />
-          Submit Your Vote(s)
+          {submitVoteButtonText}
         </Button>
       )}
     </div>
