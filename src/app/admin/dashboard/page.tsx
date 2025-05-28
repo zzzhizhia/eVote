@@ -6,15 +6,29 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine } from 'lucide-react';
+import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine, ListChecks, Edit3, Trash2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from "@/hooks/use-toast";
+import type { Poll } from '@/lib/types';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
 
 const RESULTS_VISIBILITY_KEY = 'eVote_isResultsPublic';
 const HOME_PAGE_INTRO_TEXT_KEY = 'eVote_homePageIntroText';
 const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText';
+const POLLS_STORAGE_KEY = 'eVote_polls_list';
 
 const DEFAULT_HOME_INTRO = "We are pleased to announce that the next presidential election will be held soon. This is your opportunity to choose the leader who will best represent your interests. Prepare to learn about the candidates and make an informed decision.";
 const DEFAULT_VOTE_INTRO = "Review the candidates below and make your selection. Click on a candidate's card to select them, then submit your vote.";
@@ -31,6 +45,9 @@ export default function AdminDashboardPage() {
   const [voteIntroText, setVoteIntroText] = useState('');
   const [isLoadingHomeIntro, setIsLoadingHomeIntro] = useState(true);
   const [isLoadingVoteIntro, setIsLoadingVoteIntro] = useState(true);
+
+  const [polls, setPolls] = useState<Poll[]>([]);
+  const [isLoadingPolls, setIsLoadingPolls] = useState(true);
 
   useEffect(() => {
     const authStatus = localStorage.getItem('isAdminAuthenticated') === 'true';
@@ -62,7 +79,7 @@ export default function AdminDashboardPage() {
     // Load Home page intro text
     try {
       const storedHomeIntro = localStorage.getItem(HOME_PAGE_INTRO_TEXT_KEY);
-      setHomeIntroText(storedHomeIntro || ''); // Keep empty if not set, so placeholder shows in textarea
+      setHomeIntroText(storedHomeIntro || '');
     } catch (error) {
       console.error("Error reading home intro text from localStorage:", error);
       setHomeIntroText('');
@@ -77,7 +94,7 @@ export default function AdminDashboardPage() {
     // Load Vote page intro text
     try {
       const storedVoteIntro = localStorage.getItem(VOTE_PAGE_INTRO_TEXT_KEY);
-      setVoteIntroText(storedVoteIntro || ''); // Keep empty if not set
+      setVoteIntroText(storedVoteIntro || '');
     } catch (error) {
       console.error("Error reading vote intro text from localStorage:", error);
       setVoteIntroText('');
@@ -89,7 +106,28 @@ export default function AdminDashboardPage() {
     }
     setIsLoadingVoteIntro(false);
 
+    // Load polls
+    loadPollsFromStorage();
+
   }, [router, toast]);
+
+  const loadPollsFromStorage = () => {
+    setIsLoadingPolls(true);
+    try {
+      const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
+      const existingPolls: Poll[] = storedPollsRaw ? JSON.parse(storedPollsRaw) : [];
+      setPolls(existingPolls);
+    } catch (error) {
+      console.error("Error reading polls from localStorage:", error);
+      setPolls([]);
+      toast({
+        title: "Error Loading Polls",
+        description: "Could not load existing polls.",
+        variant: "destructive",
+      });
+    }
+    setIsLoadingPolls(false);
+  };
 
   const handleResultsVisibilityToggle = (checked: boolean) => {
     try {
@@ -142,6 +180,25 @@ export default function AdminDashboardPage() {
       });
     }
   };
+
+  const handleDeletePoll = (pollId: string) => {
+    try {
+      const updatedPolls = polls.filter(p => p.id !== pollId);
+      localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(updatedPolls));
+      setPolls(updatedPolls);
+      toast({
+        title: "Poll Deleted",
+        description: "The poll has been successfully deleted.",
+      });
+    } catch (error) {
+      console.error("Error deleting poll:", error);
+      toast({
+        title: "Error Deleting Poll",
+        description: "Could not delete the poll.",
+        variant: "destructive",
+      });
+    }
+  };
   
   if (!isAdminAuthenticated) {
     return (
@@ -175,6 +232,63 @@ export default function AdminDashboardPage() {
               Create New Poll
             </Link>
           </Button>
+
+          {/* Manage Polls Section */}
+          <Card className="w-full max-w-md shadow-md">
+            <CardHeader>
+              <CardTitle className="text-xl text-center flex items-center justify-center gap-2">
+                <ListChecks className="h-5 w-5" /> Manage Polls
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="py-4 space-y-3">
+              {isLoadingPolls ? (
+                <p className="text-sm text-muted-foreground text-center">Loading polls...</p>
+              ) : polls.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center">No polls created yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {polls.map((poll) => (
+                    <li key={poll.id} className="flex items-center justify-between p-2.5 bg-muted/50 rounded-md shadow-sm">
+                      <span className="text-sm font-medium truncate pr-2" title={poll.title}>{poll.title}</span>
+                      <div className="flex items-center gap-2">
+                        <Button asChild variant="outline" size="sm" className="h-8">
+                          <Link href={`/admin/edit-poll/${poll.id}`} className="flex items-center">
+                            <Edit3 className="mr-1.5 h-3.5 w-3.5" /> Edit
+                          </Link>
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" className="h-8">
+                              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the poll
+                                "{poll.title}" and all its associated data.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeletePoll(poll.id)}>
+                                Delete Poll
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+             <CardFooter className="text-xs text-muted-foreground text-center pt-3 border-t">
+              <p>Edit or delete existing polls.</p>
+            </CardFooter>
+          </Card>
+
 
           <Card className="w-full max-w-md shadow-md">
             <CardHeader>
