@@ -30,11 +30,11 @@ export default function PasswordForm() {
     if (password === ADMIN_PASSWORD) {
       toast({
         title: "Access Granted",
-        description: "Redirecting to candidate selection...",
+        description: "Redirecting to admin dashboard...",
       });
       // Store a session token or flag in a real app
       localStorage.setItem('isAdminAuthenticated', 'true'); // Simple flag for demo
-      router.push('/vote'); // As per requirement
+      router.push('/admin/dashboard'); // Redirect to the new admin dashboard
     } else {
       setError('Invalid password. Please try again.');
       toast({
