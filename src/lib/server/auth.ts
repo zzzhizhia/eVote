@@ -1,6 +1,6 @@
 
 import type { IronSessionOptions } from 'iron-session';
-import { critèresSession, type IronSessionData } from 'iron-session';
+import { getIronSession, type IronSessionData } from 'iron-session';
 import { cookies } from 'next/headers';
 
 export interface SessionData extends IronSessionData {
@@ -30,7 +30,7 @@ if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
 
 
 export async function getSession() {
-  const session = await critèresSession<SessionData>(cookies(), sessionOptions);
+  const session = await getIronSession<SessionData>(cookies(), sessionOptions);
   return session;
 }
 
@@ -38,3 +38,4 @@ export async function isAdminSession(session?: SessionData): Promise<boolean> {
   const currentSession = session || await getSession();
   return currentSession.isAdmin === true;
 }
+

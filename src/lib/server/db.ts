@@ -14,8 +14,15 @@ export function getDb() {
   return pool;
 }
 
-// Helper function to initialize the database schema if it doesn't exist.
-// This is a simplified version and should be replaced with a proper migration tool for production.
+/**
+ * Initializes the database schema if it doesn't exist.
+ * IMPORTANT: This function is intended for development convenience.
+ * In a production environment, you should use a dedicated database migration tool
+ * (e.g., Prisma Migrate, Drizzle Kit, Flyway, Liquibase) to manage your schema
+ * and apply changes in a controlled manner.
+ * Running this function in production might lead to unintended consequences or data loss.
+ * The calls to this function in API routes are guarded by `if (process.env.NODE_ENV === 'development')`.
+ */
 export async function initializeDbSchema() {
   const db = getDb();
   try {
@@ -51,7 +58,6 @@ export async function initializeDbSchema() {
       );
     `);
     
-    // Initialize default settings if they don't exist
     await db.query(`
       INSERT INTO app_settings (key, value) VALUES ('resultsVisibility', 'false') ON CONFLICT (key) DO NOTHING;
     `);
@@ -59,9 +65,9 @@ export async function initializeDbSchema() {
       INSERT INTO app_settings (key, value) VALUES ('customTexts', '{}') ON CONFLICT (key) DO NOTHING;
     `);
 
-    console.log("Database schema checked/initialized successfully.");
+    console.log("Database schema checked/initialized successfully (for development).");
   } catch (error) {
     console.error("Error initializing database schema:", error);
-    // For critical schema errors, you might want to throw to prevent app start
+    // For critical schema errors, you might want to throw to prevent app start in dev
   }
 }

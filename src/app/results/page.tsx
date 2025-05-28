@@ -54,7 +54,6 @@ export default function ResultsPage() {
   const fetchResultsVisibilityAndPolls = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Check admin status first to potentially bypass visibility setting
       let isAdmin = false;
       try {
         const userRes = await fetch('/api/user');
@@ -68,18 +67,31 @@ export default function ResultsPage() {
         setCanViewResults(true);
       } else {
         const settingsRes = await fetch('/api/settings');
-        if (!settingsRes.ok) throw new Error('Failed to fetch settings');
+        if (!settingsRes.ok) {
+          let errorDetails = `Status: ${settingsRes.status}`;
+          try {
+            const errorData = await settingsRes.json();
+            errorDetails += `, Message: ${errorData.message || 'Unknown server error'}`;
+          } catch (e) {
+            try {
+              const textError = await settingsRes.text();
+              errorDetails += `, Body: ${textError.substring(0, 200)}`;
+            } catch (textE) {
+              errorDetails += `, Body: Could not read error body.`;
+            }
+          }
+          throw new Error(`Failed to fetch settings for results page. ${errorDetails}`);
+        }
         const settingsData = await settingsRes.json();
         setCanViewResults(settingsData.resultsVisibility || false);
       }
       
-      // Fetch all polls
       const pollsRes = await fetch('/api/polls');
       if (!pollsRes.ok) throw new Error('Failed to fetch polls');
       const fetchedPolls: Poll[] = await pollsRes.json();
       
       const upToDatePolls = fetchedPolls.map(checkPollStatus);
-      setAllPolls(upToDatePolls.sort((a, b) => (new Date(b.id.substring(0,13)) as any) - (new Date(a.id.substring(0,13)) as any))); // Sort by creation desc
+      setAllPolls(upToDatePolls.sort((a, b) => (new Date(b.id.substring(0,13)) as any) - (new Date(a.id.substring(0,13)) as any)));
         
       let pollToDisplay: Poll | null = null;
       if (targetPollId) {
@@ -92,13 +104,12 @@ export default function ResultsPage() {
 
     } catch (error) {
       console.error("Error loading results page data:", error);
-      // Handle errors appropriately, maybe set an error state
-      setCanViewResults(false); // Default to not viewable on error
+      setCanViewResults(false);
       setAllPolls([]);
       setActivePoll(null);
     }
     setIsLoading(false);
-  }, [targetPollId]);
+  }, [targetPollId, t]); // Added t to dependencies as it's used in error messages indirectly via t() calls in JSX
 
   useEffect(() => {
     fetchResultsVisibilityAndPolls();

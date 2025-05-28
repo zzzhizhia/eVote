@@ -32,7 +32,21 @@ export default function HomePage() {
     setIsLoadingTexts(true);
     try {
       const res = await fetch('/api/settings');
-      if (!res.ok) throw new Error('Failed to fetch settings');
+      if (!res.ok) {
+        let errorDetails = `Status: ${res.status}`;
+        try {
+          const errorData = await res.json();
+          errorDetails += `, Message: ${errorData.message || 'Unknown server error'}`;
+        } catch (e) {
+          try {
+            const textError = await res.text();
+            errorDetails += `, Body: ${textError.substring(0, 200)}`;
+          } catch (textE) {
+            errorDetails += `, Body: Could not read error body.`;
+          }
+        }
+        throw new Error(`Failed to fetch settings. ${errorDetails}`);
+      }
       const settingsData = await res.json();
       
       const currentLocaleCustomTexts: CustomTextsForLocale = settingsData.customTexts?.[locale] || {};
@@ -48,7 +62,7 @@ export default function HomePage() {
       setIntroParagraph(defaultLocalizedTexts.introParagraph);
     }
     setIsLoadingTexts(false);
-  }, [locale, defaultLocalizedTexts]);
+  }, [locale, defaultLocalizedTexts, t]); // Added t to dependencies
 
   useEffect(() => {
     loadCustomTexts();

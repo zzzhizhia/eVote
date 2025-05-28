@@ -68,7 +68,6 @@ export default function AdminDashboardPage() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [isLoadingPolls, setIsLoadingPolls] = useState(true);
 
-  // Input states tied to customTexts for editing
   const [homeTitleInput, setHomeTitleInput] = useState('');
   const [homeDescriptionInput, setHomeDescriptionInput] = useState('');
   const [homeIntroTextInput, setHomeIntroTextInput] = useState('');
@@ -98,17 +97,30 @@ export default function AdminDashboardPage() {
       }
       setIsAdminAuthenticated(true);
 
-      // Fetch settings (results visibility and custom texts)
       setIsLoadingVisibility(true);
       setIsLoadingCustomTexts(true);
       const settingsRes = await fetch('/api/settings');
-      if (!settingsRes.ok) throw new Error('Failed to fetch settings');
+      if (!settingsRes.ok) {
+        let errorDetails = `Status: ${settingsRes.status}`;
+        try {
+          const errorData = await settingsRes.json();
+          errorDetails += `, Message: ${errorData.message || 'Unknown server error'}`;
+        } catch (e) {
+          try {
+            const textError = await settingsRes.text();
+            errorDetails += `, Body: ${textError.substring(0, 200)}`;
+          } catch (textE) {
+            errorDetails += `, Body: Could not read error body.`;
+          }
+        }
+        throw new Error(`Failed to fetch settings for admin dashboard. ${errorDetails}`);
+      }
       const settingsData = await settingsRes.json();
       
       setIsResultsPublic(settingsData.resultsVisibility || false);
       
       const currentLocaleCustomTexts = settingsData.customTexts?.[locale] || {};
-      setCustomTexts(settingsData.customTexts || {}); // Store all languages
+      setCustomTexts(settingsData.customTexts || {});
       
       setHomeTitleInput(currentLocaleCustomTexts.homePageTitle || defaultLocalizedTexts.homePageTitle);
       setHomeDescriptionInput(currentLocaleCustomTexts.homePageDescription || defaultLocalizedTexts.homePageDescription);
@@ -118,23 +130,22 @@ export default function AdminDashboardPage() {
       setIsLoadingVisibility(false);
       setIsLoadingCustomTexts(false);
 
-      // Fetch polls
       loadPolls();
 
     } catch (error) {
       console.error("Error fetching admin data:", error);
-      toast({ title: t('toast.errorLoadingData'), description: t('toast.errorLoadingDataDescription'), variant: "destructive" });
-      router.push('/admin');
+      toast({ title: t('toast.errorLoadingData'), description: (error as Error).message || t('toast.errorLoadingDataDescription'), variant: "destructive" });
+      // Avoid pushing to /admin if already on an admin sub-page to prevent loops if /api/user fails temporarily
+      // router.push('/admin'); 
     } finally {
       setIsAuthLoading(false);
     }
-  }, [router, toast, t, locale, defaultLocalizedTexts]);
+  }, [router, toast, t, locale, defaultLocalizedTexts]); // Removed loadPolls from here, called separately
 
   useEffect(() => {
     fetchAdminStatusAndData();
   }, [fetchAdminStatusAndData]);
 
-  // Refetch custom texts if locale changes
    useEffect(() => {
     if (isAdminAuthenticated && !isLoadingCustomTexts) {
         const currentLocaleCustomTexts = customTexts[locale as keyof typeof customTexts] || {};
@@ -156,13 +167,13 @@ export default function AdminDashboardPage() {
       const { updatedPolls, wasChanged } = checkAndUpdatePollStatuses(fetchedPolls);
       setPolls(updatedPolls);
 
-      if (wasChanged) { // If any poll status was auto-updated, persist this change
+      if (wasChanged) {
         for (const poll of updatedPolls) {
-          if (!poll.isOpen && fetchedPolls.find(p => p.id === poll.id)?.isOpen) { // Check if this specific poll was closed
+          if (!poll.isOpen && fetchedPolls.find(p => p.id === poll.id)?.isOpen) {
             await fetch(`/api/polls/${poll.id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(poll), // Send the whole poll object to update its status
+              body: JSON.stringify(poll),
             });
           }
         }
@@ -170,7 +181,7 @@ export default function AdminDashboardPage() {
     } catch (error) {
       console.error("Error loading polls:", error);
       setPolls([]);
-      toast({ title: t('toast.errorLoadingPolls'), description: t('toast.errorLoadingPollsDescription'), variant: "destructive" });
+      toast({ title: t('toast.errorLoadingPolls'), description: (error as Error).message || t('toast.errorLoadingPollsDescription'), variant: "destructive" });
     }
     setIsLoadingPolls(false);
   };
@@ -192,7 +203,7 @@ export default function AdminDashboardPage() {
       });
     } catch (error) {
       console.error("Error toggling poll status:", error);
-      toast({ title: t('toast.errorUpdatingPoll'), description: t('toast.errorUpdatingPollDescription'), variant: "destructive" });
+      toast({ title: t('toast.errorUpdatingPoll'), description: (error as Error).message || t('toast.errorUpdatingPollDescription'), variant: "destructive" });
     }
   };
 
@@ -213,7 +224,7 @@ export default function AdminDashboardPage() {
       });
     } catch (error) {
        console.error("Error saving results visibility:", error);
-       toast({ title: t('toast.errorSavingSettings'), description: t('toast.errorSavingSettingsVisibilityDescription'), variant: "destructive" });
+       toast({ title: t('toast.errorSavingSettings'), description: (error as Error).message || t('toast.errorSavingSettingsVisibilityDescription'), variant: "destructive" });
     }
     setIsSavingVisibility(false);
   };
@@ -243,8 +254,7 @@ export default function AdminDashboardPage() {
       });
       if (!res.ok) throw new Error('Failed to save custom texts');
 
-      setCustomTexts(updatedCustomTexts); // Update local state with all languages
-      // Update input state specifically for current locale
+      setCustomTexts(updatedCustomTexts);
       if (fieldKey === 'homePageTitle') setHomeTitleInput(value);
       else if (fieldKey === 'homePageDescription') setHomeDescriptionInput(value);
       else if (fieldKey === 'homePageIntroText') setHomeIntroTextInput(value);
@@ -253,7 +263,7 @@ export default function AdminDashboardPage() {
       toast({ title: t(successToastTitleKey), description: t(successToastDescKey) });
     } catch (error) {
       console.error(`Error saving ${fieldKey}:`, error);
-      toast({ title: t(errorToastTitleKey), description: t(errorToastDescKey), variant: "destructive" });
+      toast({ title: t(errorToastTitleKey), description: (error as Error).message || t(errorToastDescKey), variant: "destructive" });
     }
     setIsSavingCustomTexts(prev => ({...prev, [fieldKey]: false}));
   };
@@ -267,7 +277,7 @@ export default function AdminDashboardPage() {
       toast({ title: t('toast.pollDeleted'), description: t('toast.pollDeletedDescription') });
     } catch (error) {
       console.error("Error deleting poll:", error);
-      toast({ title: t('toast.errorDeletingPoll'), description: t('toast.errorDeletingPollDescription'), variant: "destructive" });
+      toast({ title: t('toast.errorDeletingPoll'), description: (error as Error).message || t('toast.errorDeletingPollDescription'), variant: "destructive" });
     }
   };
 
