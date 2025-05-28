@@ -8,7 +8,7 @@
   "header.language.english": "English",
   "header.language.chinese": "中文",
 
-  "home.title": "总统大选即将举行！",
+  "home.title": "选举即将开始",
   "home.description": "您的声音至关重要。请务必投下您的一票，塑造未来。",
   "home.defaultIntro": "选举即将开始！了解候选人并投出你的一票！",
   "home.proceedToVoting": "前往投票",
@@ -255,3 +255,5 @@
   "candidateCard.disabledAriaLabel": "{{candidateName}} (投票已关闭、达到限制或已达最大选择数)"
 }
 
+
+    

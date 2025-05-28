@@ -8,7 +8,7 @@
   "header.language.english": "English",
   "header.language.chinese": "中文",
 
-  "home.title": "Upcoming Presidential Election!",
+  "home.title": "The election is about to begin!",
   "home.description": "Your voice matters. Make sure to cast your vote and shape the future.",
   "home.defaultIntro": "The election is about to begin! Learn about the candidates and cast your vote!",
   "home.proceedToVoting": "Proceed to Voting",
@@ -255,3 +255,5 @@
   "candidateCard.disabledAriaLabel": "{{candidateName}} (voting closed, limit reached, or max selections made)"
 }
 
+
+    
