@@ -1,17 +1,15 @@
+
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import TickerTape from '@/components/results/TickerTape';
-import { MOCK_CANDIDATES } from '@/lib/mockdata';
-import type { Candidate } from '@/lib/types';
+import type { Poll, PollCandidate } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Award, Users } from 'lucide-react';
+import { Award, Users, Info } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
-interface VoteResults {
-  [candidateId: string]: number;
-}
+const POLLS_STORAGE_KEY = 'eVote_polls_list';
 
 interface ChartData {
   name: string;
@@ -20,54 +18,103 @@ interface ChartData {
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
-
 export default function ResultsPage() {
-  const [results, setResults] = useState<VoteResults | null>(null);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [activePoll, setActivePoll] = useState<Poll | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [totalVotes, setTotalVotes] = useState(0);
-  const [winner, setWinner] = useState<Candidate | null>(null);
+  const [winner, setWinner] = useState<PollCandidate | null>(null);
 
   useEffect(() => {
-    setCandidates(MOCK_CANDIDATES);
-    const storedVotes = localStorage.getItem('eVote_allVotes');
-    if (storedVotes) {
-      const parsedVotes: VoteResults = JSON.parse(storedVotes);
-      setResults(parsedVotes);
+    try {
+      const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
+      if (storedPollsRaw) {
+        const storedPolls: Poll[] = JSON.parse(storedPollsRaw);
+        if (storedPolls.length > 0) {
+          const currentPoll = storedPolls[storedPolls.length - 1]; // Use the latest poll
+          setActivePoll(currentPoll);
 
-      let currentTotalVotes = 0;
-      let maxVotes = -1;
-      let currentWinnerId: string | null = null;
+          let currentTotalVotes = 0;
+          let maxVotes = -1;
+          let currentWinnerId: string | null = null;
 
-      for (const candidateId in parsedVotes) {
-        currentTotalVotes += parsedVotes[candidateId];
-        if (parsedVotes[candidateId] > maxVotes) {
-          maxVotes = parsedVotes[candidateId];
-          currentWinnerId = candidateId;
+          if (currentPoll.votes) {
+            for (const candidateId in currentPoll.votes) {
+              const voteCount = currentPoll.votes[candidateId];
+              currentTotalVotes += voteCount;
+              if (voteCount > maxVotes) {
+                maxVotes = voteCount;
+                currentWinnerId = candidateId;
+              }
+            }
+          }
+          setTotalVotes(currentTotalVotes);
+          if (currentWinnerId) {
+            setWinner(currentPoll.candidates.find(c => c.id === currentWinnerId) || null);
+          } else if (currentPoll.candidates.length > 0 && currentTotalVotes === 0) {
+            // If no votes yet, or all votes are 0, there's no clear winner
+            setWinner(null);
+          }
+
+        } else {
+          setActivePoll(null);
         }
+      } else {
+        setActivePoll(null);
       }
-      setTotalVotes(currentTotalVotes);
-      if (currentWinnerId) {
-        setWinner(MOCK_CANDIDATES.find(c => c.id === currentWinnerId) || null);
-      }
-
+    } catch (error) {
+      console.error("Error loading poll results from localStorage:", error);
+      setActivePoll(null);
+      // Consider adding a toast message here
     }
+    setIsLoading(false);
   }, []);
 
-  const chartData: ChartData[] = candidates.map(candidate => ({
-    name: candidate.name,
-    votes: results?.[candidate.id] || 0,
-  })).sort((a, b) => b.votes - a.votes);
+  const chartData: ChartData[] = useMemo(() => {
+    if (!activePoll || !activePoll.votes) return [];
+    return activePoll.candidates.map(candidate => ({
+      name: candidate.name,
+      votes: activePoll.votes?.[candidate.id] || 0,
+    })).sort((a, b) => b.votes - a.votes);
+  }, [activePoll]);
 
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-10">
+        <p className="text-lg text-muted-foreground">Loading results...</p>
+      </div>
+    );
+  }
+
+  if (!activePoll) {
+    return (
+       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-12">
+        <Card className="w-full max-w-lg text-center shadow-lg">
+          <CardHeader>
+            <div className="flex justify-center mb-3">
+              <Info className="h-12 w-12 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">No Poll Results</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CardDescription className="text-base">
+              There are currently no poll results available. Please create a poll and cast some votes.
+            </CardDescription>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center space-y-10 py-8">
       <h1 className="text-4xl font-bold tracking-tight text-center text-primary">
-        Election Results
+        Results: {activePoll.title}
       </h1>
       
-      <TickerTape candidates={candidates} />
+      {activePoll.candidates.length > 0 && <TickerTape candidates={activePoll.candidates} />}
 
-      {winner && (
+      {winner && totalVotes > 0 && (
         <Card className="w-full max-w-md text-center bg-gradient-to-r from-primary/10 to-accent/10 shadow-xl">
           <CardHeader>
             <div className="flex justify-center mb-2">
@@ -78,10 +125,22 @@ export default function ResultsPage() {
           </CardHeader>
           <CardContent>
             <p className="text-4xl font-bold text-primary">{winner.name}</p>
-            <p className="text-xl text-muted-foreground mt-1">with {results?.[winner.id] || 0} votes</p>
+            <p className="text-xl text-muted-foreground mt-1">with {activePoll.votes?.[winner.id] || 0} votes</p>
           </CardContent>
         </Card>
       )}
+      
+      {totalVotes === 0 && activePoll.candidates.length > 0 && (
+         <Card className="w-full max-w-md text-center shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-2xl">Awaiting Votes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">No votes have been cast in this poll yet. Be the first!</p>
+          </CardContent>
+        </Card>
+      )}
+
 
       <Card className="w-full max-w-4xl shadow-lg">
         <CardHeader>
@@ -89,12 +148,12 @@ export default function ResultsPage() {
             <Users className="h-6 w-6 text-primary" />
             Vote Distribution
           </CardTitle>
-          <CardDescription>Total Votes Cast: {totalVotes}</CardDescription>
+          <CardDescription>Total Votes Cast for "{activePoll.title}": {totalVotes}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {results ? (
-            candidates.map(candidate => {
-              const candidateVotes = results[candidate.id] || 0;
+          {activePoll.candidates.length > 0 ? (
+            activePoll.candidates.map(candidate => {
+              const candidateVotes = activePoll.votes?.[candidate.id] || 0;
               const percentage = totalVotes > 0 ? (candidateVotes / totalVotes) * 100 : 0;
               return (
                 <div key={candidate.id} className="space-y-1">
@@ -109,12 +168,12 @@ export default function ResultsPage() {
               );
             })
           ) : (
-            <p className="text-muted-foreground text-center py-4">No results available yet. Votes are being tallied.</p>
+            <p className="text-muted-foreground text-center py-4">No candidates found for this poll.</p>
           )}
         </CardContent>
       </Card>
 
-      {chartData.length > 0 && results && (
+      {chartData.length > 0 && (
          <Card className="w-full max-w-4xl shadow-lg">
             <CardHeader>
                 <CardTitle className="text-2xl">Votes Overview Chart</CardTitle>

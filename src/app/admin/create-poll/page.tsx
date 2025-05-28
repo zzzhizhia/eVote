@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, ListPlus, UploadCloud } from 'lucide-react';
+import { PlusCircle, Trash2, ListPlus } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll, PollCandidate } from '@/lib/types';
 import Image from 'next/image';
@@ -125,6 +125,7 @@ export default function CreatePollPage() {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
       title: pollTitle.trim(),
       candidates,
+      votes: {}, // Initialize votes object
     };
 
     try {
@@ -251,5 +252,3 @@ export default function CreatePollPage() {
       </Card>
     </div>
   );
-
-    

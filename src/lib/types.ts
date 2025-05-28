@@ -24,5 +24,5 @@ export interface Poll {
   id: string;
   title: string;
   candidates: PollCandidate[];
-  // votes?: { [candidateId: string]: number }; // To store votes, can be added later
+  votes: { [candidateId: string]: number }; // Stores vote counts for this poll
 }

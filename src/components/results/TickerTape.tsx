@@ -1,10 +1,11 @@
+
 'use client';
 
 import Image from 'next/image';
-import type { Candidate } from '@/lib/types';
+import type { PollCandidate } from '@/lib/types'; // Changed from Candidate to PollCandidate
 
 interface TickerTapeProps {
-  candidates: Candidate[];
+  candidates: PollCandidate[]; // Changed from Candidate to PollCandidate
 }
 
 export default function TickerTape({ candidates }: TickerTapeProps) {

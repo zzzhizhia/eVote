@@ -1,78 +1,147 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import CandidateCard from '@/components/candidates/CandidateCard';
 import { Button } from '@/components/ui/button';
-import { MOCK_CANDIDATES } from '@/lib/mockdata';
-import type { Candidate } from '@/lib/types';
-import { Send } from 'lucide-react';
+import type { Poll, PollCandidate } from '@/lib/types';
+import { Send, Info } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
+const POLLS_STORAGE_KEY = 'eVote_polls_list';
 
 export default function VotePage() {
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [activePoll, setActivePoll] = useState<Poll | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
 
   useEffect(() => {
-    // Simulate fetching candidates
-    setCandidates(MOCK_CANDIDATES);
+    try {
+      const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
+      if (storedPollsRaw) {
+        const storedPolls: Poll[] = JSON.parse(storedPollsRaw);
+        if (storedPolls.length > 0) {
+          // Use the latest poll (last in the array)
+          setActivePoll(storedPolls[storedPolls.length - 1]);
+        } else {
+          setActivePoll(null); // No polls available
+        }
+      } else {
+        setActivePoll(null); // No polls key found
+      }
+    } catch (error) {
+      console.error("Error loading polls from localStorage:", error);
+      setActivePoll(null);
+      toast({
+        title: "Error Loading Polls",
+        description: "Could not load poll data. Please try again later.",
+        variant: "destructive",
+      });
+    }
     setIsLoading(false);
-  }, []);
+  }, [toast]);
 
   const handleSelectCandidate = (candidateId: string) => {
     setSelectedCandidateId(prevId => (prevId === candidateId ? null : candidateId));
   };
 
   const handleSubmitVote = () => {
-    if (!selectedCandidateId) {
+    if (!selectedCandidateId || !activePoll) {
       toast({
-        title: "No Candidate Selected",
-        description: "Please select a candidate before submitting your vote.",
+        title: "Selection Required",
+        description: "Please select a candidate and ensure a poll is active.",
         variant: "destructive",
       });
       return;
     }
     
-    // Store the vote in localStorage. In a real app, this would be an API call.
-    localStorage.setItem('eVote_selectedCandidateId', selectedCandidateId);
-    
-    // Store/update overall votes (mocked)
-    const currentVotes = JSON.parse(localStorage.getItem('eVote_allVotes') || '{}');
-    currentVotes[selectedCandidateId] = (currentVotes[selectedCandidateId] || 0) + 1;
-    localStorage.setItem('eVote_allVotes', JSON.stringify(currentVotes));
+    try {
+      const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
+      let allPolls: Poll[] = storedPollsRaw ? JSON.parse(storedPollsRaw) : [];
+      
+      const pollIndex = allPolls.findIndex(p => p.id === activePoll.id);
 
-    toast({
-      title: "Vote Submitted!",
-      description: `Your vote for ${candidates.find(c => c.id === selectedCandidateId)?.name} has been recorded.`,
-    });
-    router.push('/results');
+      if (pollIndex === -1) {
+        toast({
+          title: "Error Recording Vote",
+          description: "Active poll not found. Your vote could not be saved.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Update votes for the specific candidate in the specific poll
+      const updatedPoll = { ...allPolls[pollIndex] };
+      if (!updatedPoll.votes) {
+        updatedPoll.votes = {};
+      }
+      updatedPoll.votes[selectedCandidateId] = (updatedPoll.votes[selectedCandidateId] || 0) + 1;
+      
+      allPolls[pollIndex] = updatedPoll;
+      localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(allPolls));
+
+      const selectedCandidate = activePoll.candidates.find(c => c.id === selectedCandidateId);
+      toast({
+        title: "Vote Submitted!",
+        description: `Your vote for ${selectedCandidate?.name} in the poll "${activePoll.title}" has been recorded.`,
+      });
+      router.push('/results');
+
+    } catch (error) {
+      console.error("Error saving vote to localStorage:", error);
+      toast({
+        title: "Error Saving Vote",
+        description: "An unexpected error occurred while saving your vote.",
+        variant: "destructive",
+      });
+    }
   };
 
   if (isLoading) {
     return (
       <div className="text-center py-10">
-        <p className="text-lg text-muted-foreground">Loading candidates...</p>
-        {/* Add Skeleton loaders here for better UX */}
+        <p className="text-lg text-muted-foreground">Loading poll data...</p>
+        {/* Consider adding Skeleton loaders here for better UX */}
+      </div>
+    );
+  }
+
+  if (!activePoll) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-12">
+        <Card className="w-full max-w-lg text-center shadow-lg">
+          <CardHeader>
+            <div className="flex justify-center mb-3">
+              <Info className="h-12 w-12 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">No Active Polls</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CardDescription className="text-base">
+              There are currently no active polls available for voting. Please check back later or contact an administrator.
+            </CardDescription>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center space-y-10">
+    <div className="flex flex-col items-center space-y-10 py-8">
       <h1 className="text-4xl font-bold tracking-tight text-center text-primary">
-        Who to elect as President?
+        {activePoll.title}
       </h1>
       <p className="text-lg text-muted-foreground text-center max-w-2xl">
         Review the candidates below and make your selection. Click on a candidate's card to select them, then submit your vote.
       </p>
       
-      {candidates.length > 0 ? (
+      {activePoll.candidates.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8 w-full">
-          {candidates.map((candidate) => (
+          {activePoll.candidates.map((candidate) => (
             <CandidateCard
               key={candidate.id}
               candidate={candidate}
@@ -82,10 +151,10 @@ export default function VotePage() {
           ))}
         </div>
       ) : (
-        <p className="text-muted-foreground">No candidates available at this time.</p>
+        <p className="text-muted-foreground">No candidates available for this poll.</p>
       )}
 
-      {candidates.length > 0 && (
+      {activePoll.candidates.length > 0 && (
         <Button 
           size="lg" 
           onClick={handleSubmitVote} 

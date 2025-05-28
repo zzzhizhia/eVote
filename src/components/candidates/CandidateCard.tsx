@@ -2,12 +2,12 @@
 'use client';
 
 import Image from 'next/image';
-import type { Candidate } from '@/lib/types';
+import type { PollCandidate } from '@/lib/types'; // Changed from Candidate to PollCandidate
 import { CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CandidateCardProps {
-  candidate: Candidate;
+  candidate: PollCandidate; // Changed from Candidate to PollCandidate
   onSelect: (candidateId: string) => void;
   isSelected: boolean;
 }
