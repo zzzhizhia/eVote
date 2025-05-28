@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation'; // Import useSearchParams
 import TickerTape from '@/components/results/TickerTape';
 import type { Poll, PollCandidate } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -20,6 +21,7 @@ interface ChartData {
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 export default function ResultsPage() {
+  const searchParams = useSearchParams(); // For getting pollId from URL
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [totalVotes, setTotalVotes] = useState(0);
@@ -27,12 +29,14 @@ export default function ResultsPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [areResultsPublic, setAreResultsPublic] = useState(false);
   const [canViewResults, setCanViewResults] = useState(false);
+  const [pollTitleForDisplay, setPollTitleForDisplay] = useState<string | null>(null);
+
 
   useEffect(() => {
     setIsLoading(true);
-    let currentPoll: Poll | null = null;
     let adminStatus = false;
     let publicVisibility = false;
+    const targetPollId = searchParams.get('pollId');
 
     try {
       adminStatus = localStorage.getItem('isAdminAuthenticated') === 'true';
@@ -41,44 +45,64 @@ export default function ResultsPage() {
       const storedVisibility = localStorage.getItem(RESULTS_VISIBILITY_KEY);
       publicVisibility = storedVisibility ? JSON.parse(storedVisibility) : false;
       setAreResultsPublic(publicVisibility);
+      
+      setCanViewResults(adminStatus || publicVisibility); // Determine if results can be viewed
 
       const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
       if (storedPollsRaw) {
         const storedPolls: Poll[] = JSON.parse(storedPollsRaw);
-        if (storedPolls.length > 0) {
-          currentPoll = storedPolls[storedPolls.length - 1]; // Use the latest poll
-          setActivePoll(currentPoll);
+        let pollToDisplay: Poll | null = null;
 
+        if (targetPollId) {
+          pollToDisplay = storedPolls.find(p => p.id === targetPollId) || null;
+        } else if (storedPolls.length > 0) {
+          // Fallback to the latest poll if no specific pollId or if pollId is invalid
+          pollToDisplay = storedPolls[storedPolls.length - 1];
+        }
+        
+        setActivePoll(pollToDisplay);
+        setPollTitleForDisplay(pollToDisplay ? pollToDisplay.title : "No Poll Selected");
+
+
+        if (pollToDisplay) {
           let currentTotalVotes = 0;
           let maxVotes = -1;
           let currentWinnerId: string | null = null;
 
-          if (currentPoll.votes) {
-            for (const candidateId in currentPoll.votes) {
-              const voteCount = currentPoll.votes[candidateId];
+          if (pollToDisplay.votes) {
+            for (const candidateId in pollToDisplay.votes) {
+              const voteCount = pollToDisplay.votes[candidateId];
               currentTotalVotes += voteCount;
               if (voteCount > maxVotes) {
                 maxVotes = voteCount;
                 currentWinnerId = candidateId;
+              } else if (voteCount === maxVotes) { // Handle ties by nullifying winner if multiple have max_votes
+                currentWinnerId = null; 
               }
             }
           }
           setTotalVotes(currentTotalVotes);
-          if (currentWinnerId) {
-            setWinner(currentPoll.candidates.find(c => c.id === currentWinnerId) || null);
-          } else if (currentPoll.candidates.length > 0 && currentTotalVotes === 0) {
-            setWinner(null);
+          if (currentWinnerId && maxVotes > 0) { // Ensure there's a unique winner with votes
+            setWinner(pollToDisplay.candidates.find(c => c.id === currentWinnerId) || null);
+          } else {
+            setWinner(null); // No winner or tie
           }
+        } else {
+           setTotalVotes(0);
+           setWinner(null);
         }
+      } else {
+        setActivePoll(null);
+        setPollTitleForDisplay("No Polls Available");
       }
     } catch (error) {
       console.error("Error loading data from localStorage:", error);
       setActivePoll(null);
+      setPollTitleForDisplay("Error Loading Poll");
     }
     
-    setCanViewResults(adminStatus || publicVisibility);
     setIsLoading(false);
-  }, []);
+  }, [searchParams]);
 
   const chartData: ChartData[] = useMemo(() => {
     if (!activePoll || !activePoll.votes || !canViewResults) return [];
@@ -98,7 +122,7 @@ export default function ResultsPage() {
     );
   }
 
-  if (!canViewResults && !isAdmin) {
+  if (!canViewResults) { // Simplified check, admin check is included in canViewResults
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-12">
         <Card className="w-full max-w-lg text-center shadow-lg">
@@ -130,7 +154,7 @@ export default function ResultsPage() {
           </CardHeader>
           <CardContent>
             <CardDescription className="text-base">
-              There are currently no poll results available. Please create a poll and cast some votes.
+              {searchParams.get('pollId') ? `Could not find results for the specified poll.` : `There are currently no poll results available. Please create a poll and cast some votes.`}
             </CardDescription>
           </CardContent>
         </Card>
@@ -142,7 +166,7 @@ export default function ResultsPage() {
   return (
     <div className="flex flex-col items-center space-y-10 py-8">
       <h1 className="text-4xl font-bold tracking-tight text-center text-primary">
-        Results: {activePoll.title}
+        Results: {pollTitleForDisplay}
       </h1>
       
       {activePoll.candidates.length > 0 && <TickerTape candidates={activePoll.candidates} />}
@@ -159,6 +183,17 @@ export default function ResultsPage() {
           <CardContent>
             <p className="text-4xl font-bold text-primary">{winner.name}</p>
             <p className="text-xl text-muted-foreground mt-1">with {activePoll.votes?.[winner.id] || 0} votes</p>
+          </CardContent>
+        </Card>
+      )}
+      
+      {!winner && totalVotes > 0 && (
+        <Card className="w-full max-w-md text-center shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-2xl">Results Update</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">There is currently a tie or votes are still being tallied.</p>
           </CardContent>
         </Card>
       )}
@@ -235,3 +270,4 @@ export default function ResultsPage() {
     </div>
   );
 }
+
