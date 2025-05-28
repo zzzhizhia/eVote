@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, ListPlus, CalendarClock, UserCheck, Users } from 'lucide-react';
+import { PlusCircle, Trash2, ListPlus, CalendarClock, UserCheck, Users, CheckSquare, Square } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll, PollCandidate } from '@/lib/types';
@@ -27,6 +27,8 @@ export default function CreatePollPage() {
   const [scheduledCloseTime, setScheduledCloseTime] = useState<string>('');
   const [voteLimitEnabled, setVoteLimitEnabled] = useState(false);
   const [maxVotesPerClient, setMaxVotesPerClient] = useState(1);
+  const [isMultiSelect, setIsMultiSelect] = useState(false);
+  const [maxSelections, setMaxSelections] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -129,6 +131,23 @@ export default function CreatePollPage() {
       });
       return;
     }
+    if (isMultiSelect && maxSelections < 1) {
+      toast({
+        title: "Invalid Max Selections",
+        description: "Maximum selections must be at least 1 if multi-select is enabled.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (isMultiSelect && maxSelections > candidates.length) {
+        toast({
+            title: "Invalid Max Selections",
+            description: "Maximum selections cannot exceed the number of candidates.",
+            variant: "destructive",
+        });
+        return;
+    }
+
 
     setIsLoading(true);
 
@@ -141,6 +160,8 @@ export default function CreatePollPage() {
       scheduledCloseTime: scheduledCloseTime ? new Date(scheduledCloseTime).toISOString() : null,
       voteLimitEnabled,
       maxVotesPerClient: voteLimitEnabled ? maxVotesPerClient : undefined,
+      isMultiSelect,
+      maxSelections: isMultiSelect ? maxSelections : 1,
     };
 
     try {
@@ -157,6 +178,8 @@ export default function CreatePollPage() {
       setScheduledCloseTime('');
       setVoteLimitEnabled(false);
       setMaxVotesPerClient(1);
+      setIsMultiSelect(false);
+      setMaxSelections(1);
       router.push('/admin/dashboard');
     } catch (error) {
       console.error("Failed to save poll:", error);
@@ -233,6 +256,33 @@ export default function CreatePollPage() {
                     className="text-sm h-8 w-24"
                   />
                    <p className="text-xs text-muted-foreground">Client limits are browser-based and can be bypassed.</p>
+                </div>
+              )}
+
+              <div className="flex items-center space-x-3 pt-2">
+                {isMultiSelect ? <CheckSquare className="h-5 w-5 text-blue-500" /> : <Square className="h-5 w-5 text-muted-foreground" />}
+                <Label htmlFor="multiSelectSwitch" className="text-sm flex-grow">
+                  Enable Multi-Select
+                </Label>
+                <Switch
+                  id="multiSelectSwitch"
+                  checked={isMultiSelect}
+                  onCheckedChange={setIsMultiSelect}
+                  aria-label="Toggle multi-select for poll"
+                />
+              </div>
+              {isMultiSelect && (
+                <div className="space-y-1 pl-8">
+                  <Label htmlFor="maxSelections" className="text-xs text-muted-foreground">Maximum Selections</Label>
+                  <Input
+                    id="maxSelections"
+                    type="number"
+                    value={maxSelections}
+                    onChange={(e) => setMaxSelections(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    min="1"
+                    className="text-sm h-8 w-24"
+                  />
+                   <p className="text-xs text-muted-foreground">Max number of candidates a user can select.</p>
                 </div>
               )}
             </div>

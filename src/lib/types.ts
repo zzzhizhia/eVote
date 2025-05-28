@@ -30,5 +30,7 @@ export interface Poll {
   scheduledCloseTime?: string | null; // ISO string for scheduled closing time
   voteLimitEnabled?: boolean; // Whether to limit votes per client
   maxVotesPerClient?: number; // Max votes allowed per client if limit is enabled
+  isMultiSelect?: boolean; // Whether multiple candidates can be selected
+  maxSelections?: number; // Max number of candidates that can be selected if multi-select is enabled
 }
 

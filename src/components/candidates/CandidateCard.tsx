@@ -3,22 +3,25 @@
 
 import Image from 'next/image';
 import type { PollCandidate } from '@/lib/types'; 
-import { CheckCircle, Lock } from 'lucide-react';
+import { CheckCircle, Lock, Square, CheckSquare as CheckSquareIcon } from 'lucide-react'; // Added Square for multi-select unselected
 import { cn } from '@/lib/utils';
 
 interface CandidateCardProps {
   candidate: PollCandidate; 
   onSelect: (candidateId: string) => void;
   isSelected: boolean;
-  disabled?: boolean; // Added disabled prop
+  disabled?: boolean; 
+  isMultiSelectPoll?: boolean; // To show different selection indicator
 }
 
-export default function CandidateCard({ candidate, onSelect, isSelected, disabled = false }: CandidateCardProps) {
+export default function CandidateCard({ candidate, onSelect, isSelected, disabled = false, isMultiSelectPoll = false }: CandidateCardProps) {
   const handleSelect = () => {
     if (!disabled) {
       onSelect(candidate.id);
     }
   };
+
+  const SelectionIndicatorIcon = isMultiSelectPoll ? (isSelected ? CheckSquareIcon : Square) : CheckCircle;
 
   return (
     <div
@@ -33,7 +36,7 @@ export default function CandidateCard({ candidate, onSelect, isSelected, disable
       onKeyDown={(e) => !disabled && (e.key === 'Enter' || e.key === ' ') && handleSelect()}
       aria-pressed={isSelected}
       aria-disabled={disabled}
-      aria-label={disabled ? `${candidate.name} (voting closed)` : `Select ${candidate.name}`}
+      aria-label={disabled ? `${candidate.name} (voting closed or limit reached)` : `Select ${candidate.name}`}
     >
       <div className="relative w-32 h-32 md:w-40 md:h-40 mb-3">
         <Image
@@ -46,7 +49,12 @@ export default function CandidateCard({ candidate, onSelect, isSelected, disable
         />
         {isSelected && !disabled && (
           <div className="absolute bottom-1 right-1 bg-primary rounded-full p-1.5 text-primary-foreground shadow-md">
-            <CheckCircle className="w-5 h-5" />
+            <SelectionIndicatorIcon className="w-5 h-5" />
+          </div>
+        )}
+         {isMultiSelectPoll && !isSelected && !disabled && ( // Show empty square for selectable multi-select items
+          <div className="absolute bottom-1 right-1 bg-muted rounded-full p-1.5 text-muted-foreground border shadow-sm">
+            <Square className="w-5 h-5" />
           </div>
         )}
         {disabled && (

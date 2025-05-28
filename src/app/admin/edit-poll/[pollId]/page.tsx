@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit3, AlertTriangle, CalendarClock, ToggleLeft, ToggleRight, UserCheck, Users } from 'lucide-react';
+import { PlusCircle, Trash2, Edit3, AlertTriangle, CalendarClock, ToggleLeft, ToggleRight, UserCheck, Users, CheckSquare, Square } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll, PollCandidate } from '@/lib/types';
@@ -32,6 +32,8 @@ export default function EditPollPage() {
   const [scheduledCloseTime, setScheduledCloseTime] = useState<string>('');
   const [voteLimitEnabled, setVoteLimitEnabled] = useState(false);
   const [maxVotesPerClient, setMaxVotesPerClient] = useState(1);
+  const [isMultiSelect, setIsMultiSelect] = useState(false);
+  const [maxSelections, setMaxSelections] = useState(1);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingPoll, setIsFetchingPoll] = useState(true);
@@ -54,11 +56,13 @@ export default function EditPollPage() {
         if (pollToEdit) {
           setOriginalPoll(pollToEdit);
           setPollTitle(pollToEdit.title);
-          setCandidates(pollToEdit.candidates.map(c => ({...c})));
+          setCandidates(pollToEdit.candidates.map(c => ({...c}))); // Create deep copy for candidates
           setIsOpen(pollToEdit.isOpen);
           setScheduledCloseTime(pollToEdit.scheduledCloseTime ? format(new Date(pollToEdit.scheduledCloseTime), "yyyy-MM-dd'T'HH:mm") : '');
           setVoteLimitEnabled(pollToEdit.voteLimitEnabled || false);
           setMaxVotesPerClient(pollToEdit.maxVotesPerClient || 1);
+          setIsMultiSelect(pollToEdit.isMultiSelect || false);
+          setMaxSelections(pollToEdit.maxSelections || 1);
         } else {
           toast({
             title: "Poll Not Found",
@@ -172,6 +176,22 @@ export default function EditPollPage() {
       });
       return;
     }
+    if (isMultiSelect && maxSelections < 1) {
+      toast({
+        title: "Invalid Max Selections",
+        description: "Maximum selections must be at least 1 if multi-select is enabled.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (isMultiSelect && maxSelections > candidates.length) {
+        toast({
+            title: "Invalid Max Selections",
+            description: "Maximum selections cannot exceed the number of candidates.",
+            variant: "destructive",
+        });
+        return;
+    }
     if (!originalPoll) {
          toast({ title: "Error Saving Poll", description: "Original poll data not found. Cannot update.", variant: "destructive" });
         return;
@@ -187,9 +207,12 @@ export default function EditPollPage() {
       scheduledCloseTime: scheduledCloseTime ? new Date(scheduledCloseTime).toISOString() : null,
       voteLimitEnabled,
       maxVotesPerClient: voteLimitEnabled ? maxVotesPerClient : undefined,
+      isMultiSelect,
+      maxSelections: isMultiSelect ? maxSelections : 1,
       votes: originalPoll.votes || {}, 
     };
 
+    // Reconcile votes: remove votes for candidates no longer in the poll
     const currentCandidateIds = new Set(candidates.map(c => c.id));
     const reconciledVotes: { [candidateId: string]: number } = {};
     for (const candidateId in updatedPoll.votes) {
@@ -309,6 +332,32 @@ export default function EditPollPage() {
                     className="text-sm h-8 w-24"
                   />
                   <p className="text-xs text-muted-foreground">Client limits are browser-based and can be bypassed.</p>
+                </div>
+              )}
+              <div className="flex items-center space-x-3 pt-2">
+                {isMultiSelect ? <CheckSquare className="h-5 w-5 text-blue-500" /> : <Square className="h-5 w-5 text-muted-foreground" />}
+                <Label htmlFor="multiSelectSwitch" className="text-sm flex-grow">
+                  Enable Multi-Select
+                </Label>
+                <Switch
+                  id="multiSelectSwitch"
+                  checked={isMultiSelect}
+                  onCheckedChange={setIsMultiSelect}
+                  aria-label="Toggle multi-select for poll"
+                />
+              </div>
+              {isMultiSelect && (
+                <div className="space-y-1 pl-8">
+                  <Label htmlFor="maxSelections" className="text-xs text-muted-foreground">Maximum Selections</Label>
+                  <Input
+                    id="maxSelections"
+                    type="number"
+                    value={maxSelections}
+                    onChange={(e) => setMaxSelections(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    min="1"
+                    className="text-sm h-8 w-24"
+                  />
+                   <p className="text-xs text-muted-foreground">Max number of candidates a user can select.</p>
                 </div>
               )}
             </div>

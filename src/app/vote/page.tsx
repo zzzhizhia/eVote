@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import CandidateCard from '@/components/candidates/CandidateCard';
 import { Button } from '@/components/ui/button';
 import type { Poll } from '@/lib/types';
-import { Send, Info, ListChecks, ChevronRight, Lock, Unlock, UserCheck, ShieldAlert } from 'lucide-react';
+import { Send, Info, ListChecks, ChevronRight, Lock, Unlock, UserCheck, ShieldAlert, CheckSquare, Square } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { format, parseISO } from 'date-fns';
@@ -16,13 +16,12 @@ const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText';
 const CLIENT_POLL_VOTES_KEY = 'eVote_clientPollVotes'; // Stores { [pollId]: count }
 const DEFAULT_VOTE_INTRO = "Review the candidates below and make your selection. Click on a candidate's card to select them, then submit your vote.";
 
-// Function to update polls in localStorage if their scheduled close time has passed
 const checkAndUpdatePollStatusesClient = (polls: Poll[]): { updatedPolls: Poll[], wasChanged: boolean } => {
   const now = new Date();
   let wasChanged = false;
   const updatedPolls = polls.map(poll => {
     if (poll.isOpen && poll.scheduledCloseTime) {
-      const closeTime = parseISO(poll.scheduledCloseTime); // Use parseISO for robust date parsing
+      const closeTime = parseISO(poll.scheduledCloseTime); 
       if (now >= closeTime) {
         wasChanged = true;
         return { ...poll, isOpen: false };
@@ -65,7 +64,7 @@ const saveClientPollVote = (pollId: string) => {
 export default function VotePage() {
   const [allPolls, setAllPolls] = useState<Poll[]>([]);
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [introText, setIntroText] = useState(DEFAULT_VOTE_INTRO);
   const [clientVotes, setClientVotes] = useState<{ [pollId: string]: number }>({});
@@ -85,7 +84,7 @@ export default function VotePage() {
       setAllPolls(updatedPolls);
       setClientVotes(getClientPollVotes());
 
-      if (updatedPolls.length === 1 && !selectedPoll) { // Avoid resetting selectedPoll if one is already chosen from a list
+      if (updatedPolls.length === 1 && !selectedPoll) { 
         setSelectedPoll(updatedPolls[0]);
       } else if (updatedPolls.length === 0) {
         setSelectedPoll(null);
@@ -114,22 +113,48 @@ export default function VotePage() {
   }, [loadData]);
 
   const handleSelectCandidate = (candidateId: string) => {
-    setSelectedCandidateId(candidateId);
+    if (!selectedPoll) return;
+
+    setSelectedCandidateIds(prevSelectedIds => {
+      if (selectedPoll.isMultiSelect) {
+        const maxSelections = selectedPoll.maxSelections || 1;
+        if (prevSelectedIds.includes(candidateId)) {
+          return prevSelectedIds.filter(id => id !== candidateId);
+        } else if (prevSelectedIds.length < maxSelections) {
+          return [...prevSelectedIds, candidateId];
+        } else {
+          toast({
+            title: "Selection Limit Reached",
+            description: `You can only select up to ${maxSelections} candidate(s) for this poll.`,
+            variant: "destructive",
+          });
+          return prevSelectedIds;
+        }
+      } else {
+        // Single select behavior
+        return [candidateId];
+      }
+    });
   };
 
   const handleSelectPoll = (poll: Poll) => {
     setSelectedPoll(poll);
-    setSelectedCandidateId(null); 
+    setSelectedCandidateIds([]); 
   };
 
   const handleSubmitVote = () => {
-    if (!selectedCandidateId || !selectedPoll) {
-      toast({ title: "Selection Required", description: "Please select a poll and a candidate.", variant: "destructive" });
+    if (selectedCandidateIds.length === 0 || !selectedPoll) {
+      toast({ title: "Selection Required", description: "Please select a poll and at least one candidate.", variant: "destructive" });
       return;
     }
     if (!selectedPoll.isOpen) {
       toast({ title: "Poll Closed", description: "This poll is no longer accepting votes.", variant: "destructive" });
       return;
+    }
+
+    if (selectedPoll.isMultiSelect && selectedPoll.maxSelections && selectedCandidateIds.length > selectedPoll.maxSelections) {
+        toast({ title: "Too Many Selections", description: `You have selected more than the allowed ${selectedPoll.maxSelections} candidates.`, variant: "destructive" });
+        return;
     }
 
     if (selectedPoll.voteLimitEnabled) {
@@ -160,7 +185,10 @@ export default function VotePage() {
 
       const updatedPoll = { ...currentPollState };
       if (!updatedPoll.votes) updatedPoll.votes = {};
-      updatedPoll.votes[selectedCandidateId] = (updatedPoll.votes[selectedCandidateId] || 0) + 1;
+
+      selectedCandidateIds.forEach(candidateId => {
+        updatedPoll.votes[candidateId] = (updatedPoll.votes[candidateId] || 0) + 1;
+      });
       
       pollsFromStorage[pollIndex] = updatedPoll;
       localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(pollsFromStorage));
@@ -169,9 +197,13 @@ export default function VotePage() {
         saveClientPollVote(selectedPoll.id);
         setClientVotes(getClientPollVotes()); // Refresh client votes state
       }
+      
+      const votedForNames = selectedPoll.candidates
+        .filter(c => selectedCandidateIds.includes(c.id))
+        .map(c => c.name)
+        .join(', ');
 
-      const candidateVotedFor = selectedPoll.candidates.find(c => c.id === selectedCandidateId);
-      toast({ title: "Vote Submitted!", description: `Your vote for ${candidateVotedFor?.name} in "${selectedPoll.title}" has been recorded.` });
+      toast({ title: "Vote Submitted!", description: `Your vote for ${votedForNames} in "${selectedPoll.title}" has been recorded.` });
       router.push(`/results?pollId=${selectedPoll.id}`);
 
     } catch (error) {
@@ -231,6 +263,7 @@ export default function VotePage() {
                         limitText = `(${maxAllowed - votesAlreadyCast} of ${maxAllowed} votes remaining)`;
                     }
                 }
+                const pollType = poll.isMultiSelect ? `Multi-select (up to ${poll.maxSelections || 1})` : 'Single-select';
 
 
               return (
@@ -242,10 +275,10 @@ export default function VotePage() {
                 >
                   <div className="flex-grow mb-2 sm:mb-0">
                       <span className="text-lg font-semibold text-foreground">{poll.title}</span>
-                      <div className={`text-xs flex items-center gap-1 ${statusColor}`}>
+                       <div className={`text-xs flex items-center gap-1 ${statusColor}`}>
                           <StatusIcon className="h-3.5 w-3.5" /> {statusText}
                       </div>
-                      <span className="text-sm text-muted-foreground block">{poll.candidates.length} candidate(s)</span>
+                      <span className="text-xs text-muted-foreground block">{poll.candidates.length} candidate(s) - {pollType}</span>
                       {poll.voteLimitEnabled && limitText && <span className="text-xs text-blue-600 block">{limitText}</span>}
                   </div>
                   <ChevronRight className="h-5 w-5 text-primary flex-shrink-0 self-center" />
@@ -258,7 +291,6 @@ export default function VotePage() {
     );
   }
 
-  // Show candidates for the selectedPoll
   let votesCastByClientForSelectedPoll = 0;
   let maxVotesForSelectedPoll = 1;
   let voteLimitReached = false;
@@ -270,7 +302,7 @@ export default function VotePage() {
       voteLimitReached = true;
     }
   }
-  const canSubmitVote = selectedCandidateId && selectedPoll.isOpen && (!selectedPoll.voteLimitEnabled || !voteLimitReached);
+  const canSubmitVote = selectedCandidateIds.length > 0 && selectedPoll.isOpen && (!selectedPoll.voteLimitEnabled || !voteLimitReached);
 
 
   return (
@@ -279,7 +311,7 @@ export default function VotePage() {
         <h1 className="text-4xl font-bold tracking-tight text-primary">{selectedPoll.title}</h1>
         <p className="text-lg text-muted-foreground max-w-2xl whitespace-pre-line">{introText}</p>
          {allPolls.length > 1 && (
-            <Button variant="link" onClick={() => { setSelectedPoll(null); loadData(); }} className="text-sm">&larr; Back to Poll List</Button>
+            <Button variant="link" onClick={() => { setSelectedPoll(null); setSelectedCandidateIds([]); loadData(); }} className="text-sm">&larr; Back to Poll List</Button>
         )}
       </div>
       
@@ -293,6 +325,24 @@ export default function VotePage() {
             <CardContent>
                 <p className="text-destructive-foreground">This poll is currently closed and not accepting new votes.</p>
                 {selectedPoll.scheduledCloseTime && <p className="text-sm text-muted-foreground mt-1">Closed at: {format(parseISO(selectedPoll.scheduledCloseTime), 'PPpp')}</p>}
+            </CardContent>
+        </Card>
+      )}
+
+      {selectedPoll.isMultiSelect && selectedPoll.isOpen && (
+         <Card className="w-full max-w-lg text-center shadow-md bg-blue-50 border-blue-400">
+            <CardHeader>
+                <CardTitle className="flex items-center justify-center gap-2 text-lg text-blue-700">
+                    <CheckSquare className="h-5 w-5"/> Multi-Select Poll
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-blue-600">
+                    You can select up to <span className="font-bold">{selectedPoll.maxSelections || 1}</span> candidate(s).
+                </p>
+                <p className="text-sm font-semibold text-blue-700">
+                    Currently selected: {selectedCandidateIds.length}
+                </p>
             </CardContent>
         </Card>
       )}
@@ -321,15 +371,28 @@ export default function VotePage() {
 
       {selectedPoll.candidates.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8 w-full">
-          {selectedPoll.candidates.map((candidate) => (
-            <CandidateCard
-              key={candidate.id}
-              candidate={candidate}
-              onSelect={handleSelectCandidate}
-              isSelected={selectedCandidateId === candidate.id}
-              disabled={!selectedPoll.isOpen || (selectedPoll.voteLimitEnabled && voteLimitReached && selectedCandidateId !== candidate.id)}
-            />
-          ))}
+          {selectedPoll.candidates.map((candidate) => {
+            const isSelected = selectedCandidateIds.includes(candidate.id);
+            let cardDisabled = !selectedPoll.isOpen || (selectedPoll.voteLimitEnabled && voteLimitReached);
+            if (selectedPoll.isMultiSelect && 
+                !isSelected && 
+                selectedCandidateIds.length >= (selectedPoll.maxSelections || 1) &&
+                selectedPoll.isOpen && // only apply this specific disable if poll is open
+                !(selectedPoll.voteLimitEnabled && voteLimitReached) // and vote limit per client not reached
+                ) {
+              cardDisabled = true;
+            }
+
+            return (
+              <CandidateCard
+                key={candidate.id}
+                candidate={candidate}
+                onSelect={handleSelectCandidate}
+                isSelected={isSelected}
+                disabled={cardDisabled}
+              />
+            );
+          })}
         </div>
       ) : (
         <p className="text-muted-foreground">No candidates available for this poll.</p>
@@ -343,7 +406,7 @@ export default function VotePage() {
           className="mt-6 shadow-lg hover:shadow-xl transition-shadow min-w-[200px]"
         >
           <Send className="mr-2 h-5 w-5" />
-          Submit Your Vote
+          Submit Your Vote(s)
         </Button>
       )}
     </div>
