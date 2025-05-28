@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine, ListChecks, Edit3, Trash2, Clock, ToggleLeft, ToggleRight, CheckCircle, XCircle, FileText } from 'lucide-react';
+import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine, ListChecks, Edit3, Trash2, Clock, ToggleLeft, ToggleRight, CheckCircle, XCircle, FileText, MessageSquareText } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,6 +30,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 const RESULTS_VISIBILITY_KEY = 'eVote_isResultsPublic';
 const HOME_PAGE_TITLE_KEY = 'eVote_homePageTitle_';
+const HOME_PAGE_DESCRIPTION_KEY = 'eVote_homePageDescription_';
 const HOME_PAGE_INTRO_TEXT_KEY = 'eVote_homePageIntroText_'; 
 const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText_'; 
 const POLLS_STORAGE_KEY = 'eVote_polls_list';
@@ -66,6 +67,7 @@ export default function AdminDashboardPage() {
   const { t, locale } = useLanguage(); 
 
   const defaultHomeTitle = t('home.title');
+  const defaultHomeDescription = t('home.description');
   const defaultHomeIntro = t('home.defaultIntro');
   const defaultVoteIntro = t('votePage.defaultIntro'); 
 
@@ -74,9 +76,11 @@ export default function AdminDashboardPage() {
   const [isLoadingVisibility, setIsLoadingVisibility] = useState(true);
 
   const [homeTitle, setHomeTitle] = useState('');
+  const [homeDescription, setHomeDescription] = useState('');
   const [homeIntroText, setHomeIntroText] = useState('');
   const [voteIntroText, setVoteIntroText] = useState('');
   const [isLoadingHomeTitle, setIsLoadingHomeTitle] = useState(true);
+  const [isLoadingHomeDescription, setIsLoadingHomeDescription] = useState(true);
   const [isLoadingHomeIntro, setIsLoadingHomeIntro] = useState(true);
   const [isLoadingVoteIntro, setIsLoadingVoteIntro] = useState(true);
 
@@ -121,6 +125,18 @@ export default function AdminDashboardPage() {
     }
     setIsLoadingHomeTitle(false);
 
+    const currentHomePageDescriptionKey = `${HOME_PAGE_DESCRIPTION_KEY}${locale}`;
+    setIsLoadingHomeDescription(true);
+    try {
+        const storedHomeDescription = localStorage.getItem(currentHomePageDescriptionKey);
+        setHomeDescription(storedHomeDescription || defaultHomeDescription);
+    } catch (error) {
+        console.error("Error reading home page description from localStorage:", error);
+        setHomeDescription(defaultHomeDescription);
+        toast({ title: t('toast.errorLoadingHomeDescription'), description: t('toast.errorLoadingHomeDescriptionDescription'), variant: "destructive"});
+    }
+    setIsLoadingHomeDescription(false);
+
 
     const currentHomePageIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
     setIsLoadingHomeIntro(true);
@@ -145,7 +161,7 @@ export default function AdminDashboardPage() {
       toast({ title: t('toast.errorLoadingVoteIntro'), description: t('toast.errorLoadingVoteIntroDescription'), variant: "destructive" });
     }
     setIsLoadingVoteIntro(false);
-  }, [locale, defaultHomeTitle, defaultHomeIntro, defaultVoteIntro, t, toast]);
+  }, [locale, defaultHomeTitle, defaultHomeDescription, defaultHomeIntro, defaultVoteIntro, t, toast]);
 
 
   const loadPollsFromStorage = () => {
@@ -203,6 +219,17 @@ export default function AdminDashboardPage() {
     } catch (error) {
         console.error("Error saving home page title to localStorage:", error);
         toast({ title: t('toast.errorSavingHomeTitle'), description: t('toast.errorSavingHomeTitleDescription'), variant: "destructive" });
+    }
+  };
+
+  const handleSaveHomeDescription = () => {
+    const currentHomePageDescriptionKey = `${HOME_PAGE_DESCRIPTION_KEY}${locale}`;
+    try {
+        localStorage.setItem(currentHomePageDescriptionKey, homeDescription);
+        toast({ title: t('toast.homeDescriptionSaved'), description: t('toast.homeDescriptionSavedDescription') });
+    } catch (error) {
+        console.error("Error saving home page description to localStorage:", error);
+        toast({ title: t('toast.errorSavingHomeDescription'), description: t('toast.errorSavingHomeDescriptionDescription'), variant: "destructive" });
     }
   };
 
@@ -383,6 +410,17 @@ export default function AdminDashboardPage() {
             </CardContent>
             <CardFooter className="border-t pt-4"><Button onClick={handleSaveHomeTitle} className="w-full" disabled={isLoadingHomeTitle}><Save className="mr-2 h-4 w-4" /> {t('admin.dashboard.saveHomePageTitleButton')}</Button></CardFooter>
           </Card>
+          
+          <Card className="w-full max-w-md shadow-md">
+            <CardHeader><CardTitle className="text-xl text-center flex items-center justify-center gap-2"><MessageSquareText className="h-5 w-5" /> {t('admin.dashboard.editHomePageDescriptionCardTitle')}</CardTitle></CardHeader>
+            <CardContent className="space-y-2 py-4">
+              <Label htmlFor="homeDescriptionTextarea">{t('admin.dashboard.homePageDescriptionLabel')}</Label>
+              {isLoadingHomeDescription ? ( <p className="text-sm text-muted-foreground">{t('admin.dashboard.loadingText')}</p> ) : (
+                <Textarea id="homeDescriptionTextarea" value={homeDescription} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setHomeDescription(e.target.value)} placeholder={t('admin.dashboard.homePageDescriptionPlaceholder')} rows={3} className="text-sm" />
+              )}
+            </CardContent>
+            <CardFooter className="border-t pt-4"><Button onClick={handleSaveHomeDescription} className="w-full" disabled={isLoadingHomeDescription}><Save className="mr-2 h-4 w-4" /> {t('admin.dashboard.saveHomePageDescriptionButton')}</Button></CardFooter>
+          </Card>
 
           <Card className="w-full max-w-md shadow-md">
             <CardHeader><CardTitle className="text-xl text-center flex items-center justify-center gap-2"><PencilLine className="h-5 w-5" /> {t('admin.dashboard.editHomePageIntroTitle')}</CardTitle></CardHeader>
@@ -411,5 +449,7 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+
+    
 
     

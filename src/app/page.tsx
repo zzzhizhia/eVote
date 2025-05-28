@@ -9,16 +9,18 @@ import { Megaphone, VoteIcon } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 const HOME_PAGE_TITLE_KEY = 'eVote_homePageTitle_';
+const HOME_PAGE_DESCRIPTION_KEY = 'eVote_homePageDescription_';
 const HOME_PAGE_INTRO_TEXT_KEY = 'eVote_homePageIntroText_';
 
 export default function HomePage() {
   const { t, locale } = useLanguage();
   const [displayTitle, setDisplayTitle] = useState('');
+  const [displayDescription, setDisplayDescription] = useState('');
   const [introParagraph, setIntroParagraph] = useState('');
 
   const defaultHomeTitle = t('home.title');
+  const defaultHomeDescription = t('home.description');
   const defaultHomeIntroParagraph = t('home.defaultIntro');
-  const defaultHomeIntroCardDescription = t('home.description');
 
 
   useEffect(() => {
@@ -31,15 +33,24 @@ export default function HomePage() {
         setDisplayTitle(defaultHomeTitle);
     }
 
+    const currentLocaleDescriptionKey = `${HOME_PAGE_DESCRIPTION_KEY}${locale}`;
+    try {
+        const storedDescription = localStorage.getItem(currentLocaleDescriptionKey);
+        setDisplayDescription((storedDescription && storedDescription.trim() !== "") ? storedDescription : defaultHomeDescription);
+    } catch (error) {
+        console.error("Error loading home page description from localStorage:", error);
+        setDisplayDescription(defaultHomeDescription);
+    }
+
     const currentLocaleIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
     try {
       const storedIntro = localStorage.getItem(currentLocaleIntroKey);
       setIntroParagraph((storedIntro && storedIntro.trim() !== "") ? storedIntro : defaultHomeIntroParagraph);
-    } catch (error) { // Fixed: Added opening brace
+    } catch (error) { 
       console.error("Error loading home page intro from localStorage:", error);
       setIntroParagraph(defaultHomeIntroParagraph);
-    } // Fixed: Added closing brace
-  }, [locale, defaultHomeTitle, defaultHomeIntroParagraph, t]); // Added t to dependency array
+    } 
+  }, [locale, defaultHomeTitle, defaultHomeDescription, defaultHomeIntroParagraph, t]); 
   
   useEffect(() => {
     const currentLocaleTitleKey = `${HOME_PAGE_TITLE_KEY}${locale}`;
@@ -48,12 +59,18 @@ export default function HomePage() {
        setDisplayTitle(defaultHomeTitle);
     }
 
+    const currentLocaleDescriptionKey = `${HOME_PAGE_DESCRIPTION_KEY}${locale}`;
+    const storedDescription = localStorage.getItem(currentLocaleDescriptionKey);
+    if (!storedDescription || storedDescription.trim() === "") {
+       setDisplayDescription(defaultHomeDescription);
+    }
+
     const currentLocaleIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
     const storedIntro = localStorage.getItem(currentLocaleIntroKey);
     if (!storedIntro || storedIntro.trim() === "") {
        setIntroParagraph(defaultHomeIntroParagraph);
     }
-  }, [defaultHomeTitle, defaultHomeIntroParagraph, locale]);
+  }, [defaultHomeTitle, defaultHomeDescription, defaultHomeIntroParagraph, locale]);
 
 
   return (
@@ -65,14 +82,13 @@ export default function HomePage() {
             {displayTitle}
           </CardTitle>
           <CardDescription className="text-lg text-muted-foreground mt-2">
-            {defaultHomeIntroCardDescription}
+            {displayDescription}
           </CardDescription>
         </CardHeader>
         <CardContent className="text-center">
           <p className="text-base mb-6 whitespace-pre-line">
             {introParagraph}
           </p>
-          {/* The following <p> tag for voting period has been removed */}
         </CardContent>
         <CardFooter className="flex justify-center">
           <Button size="lg" asChild className="shadow-lg hover:shadow-xl transition-shadow">
@@ -86,3 +102,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+    
