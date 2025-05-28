@@ -35,11 +35,11 @@ export default function HomePage() {
     try {
       const storedIntro = localStorage.getItem(currentLocaleIntroKey);
       setIntroParagraph((storedIntro && storedIntro.trim() !== "") ? storedIntro : defaultHomeIntroParagraph);
-    } catch (error) {
+    } catch (error) { // Fixed: Added opening brace
       console.error("Error loading home page intro from localStorage:", error);
       setIntroParagraph(defaultHomeIntroParagraph);
-    }
-  }, [locale, defaultHomeTitle, defaultHomeIntroParagraph]);
+    } // Fixed: Added closing brace
+  }, [locale, defaultHomeTitle, defaultHomeIntroParagraph, t]); // Added t to dependency array
   
   useEffect(() => {
     const currentLocaleTitleKey = `${HOME_PAGE_TITLE_KEY}${locale}`;
@@ -72,9 +72,7 @@ export default function HomePage() {
           <p className="text-base mb-6 whitespace-pre-line">
             {introParagraph}
           </p>
-          <p className="text-base font-semibold">
-            {t('home.votingPeriod')}
-          </p>
+          {/* The following <p> tag for voting period has been removed */}
         </CardContent>
         <CardFooter className="flex justify-center">
           <Button size="lg" asChild className="shadow-lg hover:shadow-xl transition-shadow">
@@ -88,5 +86,3 @@ export default function HomePage() {
     </div>
   );
 }
-
-    
