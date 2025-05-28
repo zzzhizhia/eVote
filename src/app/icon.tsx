@@ -1,15 +1,43 @@
 
+import { ImageResponse } from 'next/og';
 import { VoteIcon } from 'lucide-react';
 
-// It's common to use a fixed size for favicons.
-// Next.js recommends 32x32 or 16x16 for favicons from app/icon.tsx.
-// Let's use a size that is generally good for favicons.
-const iconSize = 32;
+// Specify the runtime for this route.
+export const runtime = 'edge';
 
-export default function Icon() {
-  // For favicons generated from an SVG component, it's often best to use explicit fill/stroke colors
-  // rather than relying on CSS variables, as the browser might fetch/render the SVG
-  // in a context where application CSS (like Tailwind variables) isn't available.
-  // The primary color --primary is HSL(32 100% 50%), which is #FF8600.
-  return <VoteIcon color="#FF8600" size={iconSize} />;
+// It's good practice to define the content type,
+// though Next.js might infer it. ImageResponse defaults to PNG.
+export const contentType = 'image/png';
+export const size = {
+  width: 32,
+  height: 32,
+};
+
+export default async function Icon() {
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          height: '100%',
+          // The icon's color is set directly.
+          // No explicit background is set for the div,
+          // so it will be transparent by default.
+        }}
+      >
+        <VoteIcon color="#FF8600" size={32} />
+      </div>
+    ),
+    {
+      // ImageResponse options:
+      width: 32,  // Desired width of the output image
+      height: 32, // Desired height of the output image
+      // You can also specify fonts if your icon component uses text,
+      // but lucide-react icons are SVG paths, so fonts are not needed here.
+    }
+  );
 }
+
