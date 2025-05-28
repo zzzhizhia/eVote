@@ -213,6 +213,9 @@
   "resultsPage.noPollSelected": "未选择投票",
   "resultsPage.noPollsAvailable": "无可用投票",
   "resultsPage.errorLoadingPoll": "加载投票错误",
+  "resultsPage.selectPollPlaceholder": "选择一个投票查看结果",
+  "resultsPage.selectPollPromptTitle": "选择一个投票",
+  "resultsPage.selectPollPromptDescription": "请从上面的下拉列表中选择一个投票以查看其结果。",
 
   "votePage.loadingPollData": "正在加载投票数据...",
   "votePage.noActivePollsTitle": "无有效投票",
@@ -252,4 +255,3 @@
   "candidateCard.disabledAriaLabel": "{{candidateName}} (投票已关闭、达到限制或已达最大选择数)"
 }
 
-    

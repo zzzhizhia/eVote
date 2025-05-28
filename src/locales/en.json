@@ -213,6 +213,9 @@
   "resultsPage.noPollSelected": "No Poll Selected",
   "resultsPage.noPollsAvailable": "No Polls Available",
   "resultsPage.errorLoadingPoll": "Error Loading Poll",
+  "resultsPage.selectPollPlaceholder": "Select a poll to view results",
+  "resultsPage.selectPollPromptTitle": "Select a Poll",
+  "resultsPage.selectPollPromptDescription": "Please select a poll from the dropdown above to view its results.",
 
   "votePage.loadingPollData": "Loading poll data...",
   "votePage.noActivePollsTitle": "No Active Polls",
@@ -252,4 +255,3 @@
   "candidateCard.disabledAriaLabel": "{{candidateName}} (voting closed, limit reached, or max selections made)"
 }
 
-    
