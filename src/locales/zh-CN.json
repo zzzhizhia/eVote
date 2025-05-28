@@ -102,6 +102,12 @@
   "toast.pollJustClosedDescription": "此投票已不再接受投票。",
   "toast.voteSubmitted": "投票已提交！",
   "toast.voteSubmittedDescription": "您在 “{{pollTitle}}” 中为 {{candidateNames}} 的投票已被记录。",
+  "toast.homeTitleSaved": "首页标题已保存",
+  "toast.homeTitleSavedDescription": "首页的标题已更新。",
+  "toast.errorSavingHomeTitle": "保存首页标题失败",
+  "toast.errorSavingHomeTitleDescription": "无法保存首页标题。",
+  "toast.errorLoadingHomeTitle": "加载首页标题失败",
+  "toast.errorLoadingHomeTitleDescription": "无法加载首页标题。",
 
   "admin.createPoll.title": "创建新投票",
   "admin.createPoll.description": "定义新投票的标题、候选人及设置。",
@@ -146,6 +152,10 @@
   "admin.dashboard.resultsVisibilityPrivate": "不公开",
   "admin.dashboard.resultsVisibilityToggleAriaLabel": "切换结果可见性，当前为 {{status}}",
   "admin.dashboard.resultsVisibilityFooter": "控制非管理员用户是否可以查看投票结果。",
+  "admin.dashboard.editHomePageTitleCardTitle": "编辑首页标题",
+  "admin.dashboard.homePageTitleLabel": "首页标题",
+  "admin.dashboard.homePageTitlePlaceholder": "输入首页主标题",
+  "admin.dashboard.saveHomePageTitleButton": "保存首页标题",
   "admin.dashboard.editHomePageIntroTitle": "编辑主页介绍",
   "admin.dashboard.introTextLabel": "介绍文本",
   "admin.dashboard.loadingText": "正在加载文本...",
@@ -232,3 +242,5 @@
   "candidateCard.selectCandidateAriaLabel": "选择 {{candidateName}}",
   "candidateCard.disabledAriaLabel": "{{candidateName}} (投票已关闭、达到限制或已达最大选择数)"
 }
+
+    

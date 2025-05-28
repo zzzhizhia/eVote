@@ -8,43 +8,52 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Megaphone, VoteIcon } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
-const HOME_PAGE_INTRO_TEXT_KEY = 'eVote_homePageIntroText_'; // Appending locale
-// DEFAULT_HOME_INTRO_CARD_DESCRIPTION is now part of translations
-// DEFAULT_HOME_INTRO_PARAGRAPH is now part of translations
+const HOME_PAGE_TITLE_KEY = 'eVote_homePageTitle_';
+const HOME_PAGE_INTRO_TEXT_KEY = 'eVote_homePageIntroText_';
 
 export default function HomePage() {
   const { t, locale } = useLanguage();
+  const [displayTitle, setDisplayTitle] = useState('');
   const [introParagraph, setIntroParagraph] = useState('');
 
+  const defaultHomeTitle = t('home.title');
   const defaultHomeIntroParagraph = t('home.defaultIntro');
   const defaultHomeIntroCardDescription = t('home.description');
 
 
   useEffect(() => {
-    // Update introParagraph when locale changes or component mounts
+    const currentLocaleTitleKey = `${HOME_PAGE_TITLE_KEY}${locale}`;
+    try {
+        const storedTitle = localStorage.getItem(currentLocaleTitleKey);
+        setDisplayTitle((storedTitle && storedTitle.trim() !== "") ? storedTitle : defaultHomeTitle);
+    } catch (error) {
+        console.error("Error loading home page title from localStorage:", error);
+        setDisplayTitle(defaultHomeTitle);
+    }
+
     const currentLocaleIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
     try {
       const storedIntro = localStorage.getItem(currentLocaleIntroKey);
-      if (storedIntro && storedIntro.trim() !== "") {
-        setIntroParagraph(storedIntro);
-      } else {
-        setIntroParagraph(defaultHomeIntroParagraph); 
-      }
+      setIntroParagraph((storedIntro && storedIntro.trim() !== "") ? storedIntro : defaultHomeIntroParagraph);
     } catch (error) {
       console.error("Error loading home page intro from localStorage:", error);
       setIntroParagraph(defaultHomeIntroParagraph);
     }
-  }, [locale, defaultHomeIntroParagraph]);
+  }, [locale, defaultHomeTitle, defaultHomeIntroParagraph]);
   
-  // Effect to update introParagraph if the default text itself changes due to language switch
-  // and no custom text is set.
   useEffect(() => {
+    const currentLocaleTitleKey = `${HOME_PAGE_TITLE_KEY}${locale}`;
+    const storedTitle = localStorage.getItem(currentLocaleTitleKey);
+    if (!storedTitle || storedTitle.trim() === "") {
+       setDisplayTitle(defaultHomeTitle);
+    }
+
     const currentLocaleIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
     const storedIntro = localStorage.getItem(currentLocaleIntroKey);
     if (!storedIntro || storedIntro.trim() === "") {
        setIntroParagraph(defaultHomeIntroParagraph);
     }
-  }, [defaultHomeIntroParagraph, locale]);
+  }, [defaultHomeTitle, defaultHomeIntroParagraph, locale]);
 
 
   return (
@@ -53,10 +62,9 @@ export default function HomePage() {
         <CardHeader className="items-center text-center">
           <Megaphone className="h-16 w-16 text-primary mb-4" />
           <CardTitle className="text-4xl font-extrabold tracking-tight">
-            {t('home.title')}
+            {displayTitle}
           </CardTitle>
           <CardDescription className="text-lg text-muted-foreground mt-2">
-            {/* If this needs to be admin-editable, it would follow the same pattern as introParagraph */}
             {defaultHomeIntroCardDescription}
           </CardDescription>
         </CardHeader>
@@ -80,3 +88,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+    
