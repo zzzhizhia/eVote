@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Poll, PollCandidate } from '@/lib/types';
 import Image from 'next/image';
 import { format } from 'date-fns';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const POLLS_STORAGE_KEY = 'eVote_polls_list';
 
@@ -20,6 +21,7 @@ export default function EditPollPage() {
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const pollId = params.pollId as string;
 
   const [originalPoll, setOriginalPoll] = useState<Poll | null>(null);
@@ -56,7 +58,7 @@ export default function EditPollPage() {
         if (pollToEdit) {
           setOriginalPoll(pollToEdit);
           setPollTitle(pollToEdit.title);
-          setCandidates(pollToEdit.candidates.map(c => ({...c}))); // Create deep copy for candidates
+          setCandidates(pollToEdit.candidates.map(c => ({...c}))); 
           setIsOpen(pollToEdit.isOpen);
           setScheduledCloseTime(pollToEdit.scheduledCloseTime ? format(new Date(pollToEdit.scheduledCloseTime), "yyyy-MM-dd'T'HH:mm") : '');
           setVoteLimitEnabled(pollToEdit.voteLimitEnabled || false);
@@ -65,8 +67,8 @@ export default function EditPollPage() {
           setMaxSelections(pollToEdit.maxSelections || 1);
         } else {
           toast({
-            title: "Poll Not Found",
-            description: `Could not find a poll with ID: ${pollId}. Redirecting...`,
+            title: t('toast.pollNotFound'),
+            description: t('toast.pollNotFoundDescription', { pollId }),
             variant: "destructive",
           });
           router.push('/admin/dashboard');
@@ -74,8 +76,8 @@ export default function EditPollPage() {
       } catch (error) {
         console.error("Failed to load poll for editing:", error);
         toast({
-          title: "Error Loading Poll",
-          description: "An unexpected error occurred while loading the poll.",
+          title: t('toast.errorLoadingPoll'),
+          description: t('toast.errorLoadingPollDescription'),
           variant: "destructive",
         });
         router.push('/admin/dashboard');
@@ -84,13 +86,13 @@ export default function EditPollPage() {
       }
     } else {
       toast({
-        title: "Invalid Poll ID",
-        description: "No poll ID provided. Redirecting...",
+        title: t('toast.invalidPollId'),
+        description: t('toast.invalidPollIdDescription'),
         variant: "destructive",
       });
       router.push('/admin/dashboard');
     }
-  }, [pollId, router, toast]);
+  }, [pollId, router, toast, t]);
 
   const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -110,8 +112,8 @@ export default function EditPollPage() {
   const handleAddCandidate = async () => {
     if (!currentCandidateName.trim()) {
       toast({
-        title: "Candidate Name Empty",
-        description: "Please enter a name for the candidate.",
+        title: t('toast.candidateNameEmpty'),
+        description: t('toast.candidateNameEmptyDescription'),
         variant: "destructive",
       });
       return;
@@ -132,8 +134,8 @@ export default function EditPollPage() {
       } catch (error) {
         console.error("Error reading avatar file:", error);
         toast({
-          title: "Avatar Upload Error",
-          description: "Could not process the avatar image. Using default.",
+          title: t('toast.avatarUploadError'),
+          description: t('toast.avatarUploadErrorDescription'),
           variant: "destructive",
         });
       }
@@ -161,39 +163,39 @@ export default function EditPollPage() {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!pollTitle.trim()) {
-      toast({ title: "Poll Title Empty", description: "Please enter a title for the poll.", variant: "destructive" });
+      toast({ title: t('toast.pollTitleEmpty'), description: t('toast.pollTitleEmptyDescription'), variant: "destructive" });
       return;
     }
     if (candidates.length < 2) {
-      toast({ title: "Not Enough Candidates", description: "A poll must have at least two candidates.", variant: "destructive" });
+      toast({ title: t('toast.notEnoughCandidates'), description: t('toast.notEnoughCandidatesDescription'), variant: "destructive" });
       return;
     }
      if (voteLimitEnabled && maxVotesPerClient < 1) {
       toast({
-        title: "Invalid Vote Limit",
-        description: "Max votes per client must be at least 1 if vote limiting is enabled.",
+        title: t('toast.invalidVoteLimit'),
+        description: t('toast.invalidVoteLimitDescription'),
         variant: "destructive",
       });
       return;
     }
     if (isMultiSelect && maxSelections < 1) {
       toast({
-        title: "Invalid Max Selections",
-        description: "Maximum selections must be at least 1 if multi-select is enabled.",
+        title: t('toast.invalidMaxSelections'),
+        description: t('toast.invalidMaxSelectionsDescription'),
         variant: "destructive",
       });
       return;
     }
     if (isMultiSelect && maxSelections > candidates.length) {
         toast({
-            title: "Invalid Max Selections",
-            description: "Maximum selections cannot exceed the number of candidates.",
+            title: t('toast.invalidMaxSelectionsTooLarge'),
+            description: t('toast.invalidMaxSelectionsTooLargeDescription'),
             variant: "destructive",
         });
         return;
     }
     if (!originalPoll) {
-         toast({ title: "Error Saving Poll", description: "Original poll data not found. Cannot update.", variant: "destructive" });
+         toast({ title: t('toast.errorSavingPoll'), description: t('toast.errorSavingPollOriginalNotFoundDescription'), variant: "destructive" });
         return;
     }
 
@@ -212,7 +214,6 @@ export default function EditPollPage() {
       votes: originalPoll.votes || {}, 
     };
 
-    // Reconcile votes: remove votes for candidates no longer in the poll
     const currentCandidateIds = new Set(candidates.map(c => c.id));
     const reconciledVotes: { [candidateId: string]: number } = {};
     for (const candidateId in updatedPoll.votes) {
@@ -230,14 +231,14 @@ export default function EditPollPage() {
       if (pollIndex !== -1) {
         existingPolls[pollIndex] = updatedPoll;
         localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(existingPolls));
-        toast({ title: "Poll Updated!", description: `The poll "${updatedPoll.title}" has been successfully updated.` });
+        toast({ title: t('toast.pollUpdatedSuccess'), description: t('toast.pollUpdatedSuccessDescription', { title: updatedPoll.title }) });
         router.push('/admin/dashboard');
       } else {
-         toast({ title: "Error Saving Poll", description: "Could not find the poll to update in storage.", variant: "destructive" });
+         toast({ title: t('toast.errorSavingPoll'), description: t('toast.errorSavingPollNotFoundInStorageDescription'), variant: "destructive" });
       }
     } catch (error) {
       console.error("Failed to save updated poll:", error);
-      toast({ title: "Error Saving Poll", description: "An unexpected error occurred. Please try again.", variant: "destructive" });
+      toast({ title: t('toast.errorSavingPoll'), description: t('toast.errorSavingPollDescription'), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -249,9 +250,9 @@ export default function EditPollPage() {
         <Card className="w-full max-w-md text-center">
           <CardHeader>
             <Edit3 className="h-12 w-12 text-primary mx-auto mb-3 animate-pulse" />
-            <CardTitle className="text-2xl">Loading Poll Data...</CardTitle>
+            <CardTitle className="text-2xl">{t('admin.editPoll.loadingTitle')}</CardTitle>
           </CardHeader>
-          <CardContent><p>Please wait while we fetch the poll details for editing.</p></CardContent>
+          <CardContent><p>{t('admin.editPoll.loadingDescription')}</p></CardContent>
         </Card>
       </div>
     );
@@ -263,11 +264,11 @@ export default function EditPollPage() {
         <Card className="w-full max-w-md text-center">
           <CardHeader>
             <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-3" />
-            <CardTitle className="text-2xl">Poll Not Found</CardTitle>
+            <CardTitle className="text-2xl">{t('admin.editPoll.notFoundTitle')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>The poll you are trying to edit could not be found. It might have been deleted.</p>
-            <Button onClick={() => router.push('/admin/dashboard')} className="mt-4">Back to Dashboard</Button>
+            <p>{t('admin.editPoll.notFoundDescription')}</p>
+            <Button onClick={() => router.push('/admin/dashboard')} className="mt-4">{t('admin.editPoll.backToDashboardButton')}</Button>
           </CardContent>
         </Card>
       </div>
@@ -279,50 +280,55 @@ export default function EditPollPage() {
       <Card className="w-full max-w-2xl shadow-xl">
         <CardHeader className="items-center text-center">
           <Edit3 className="h-12 w-12 text-primary mb-3" />
-          <CardTitle className="text-3xl font-bold">Edit Poll</CardTitle>
-          <CardDescription className="text-lg">Modify the details and settings for this poll.</CardDescription>
+          <CardTitle className="text-3xl font-bold">{t('admin.editPoll.title')}</CardTitle>
+          <CardDescription className="text-lg">{t('admin.editPoll.description')}</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6 p-6">
             <div className="space-y-2">
-              <Label htmlFor="pollTitle" className="text-base">Poll Title</Label>
-              <Input id="pollTitle" type="text" value={pollTitle} onChange={(e) => setPollTitle(e.target.value)} placeholder="e.g., Favorite Programming Language" className="text-base" required />
+              <Label htmlFor="pollTitle" className="text-base">{t('admin.createPoll.pollTitleLabel')}</Label>
+              <Input id="pollTitle" type="text" value={pollTitle} onChange={(e) => setPollTitle(e.target.value)} placeholder={t('admin.createPoll.pollTitlePlaceholder')} className="text-base" required />
             </div>
 
             <div className="space-y-3 border p-4 rounded-md shadow-sm">
-              <Label className="text-base font-medium">Poll Settings</Label>
+              <Label className="text-base font-medium">{t('admin.createPoll.pollSettingsTitle')}</Label>
               <div className="flex items-center space-x-3">
                 {isOpen ? <ToggleRight className="h-6 w-6 text-green-500" /> : <ToggleLeft className="h-6 w-6 text-red-500" />}
                 <Label htmlFor="pollStatusSwitch" className="text-sm flex-grow">
-                  Poll Status: {isOpen ? 'Open' : 'Closed'}
+                  {t('admin.editPoll.pollStatusLabel', { status: isOpen ? t('admin.dashboard.pollStatusOpen') : t('admin.dashboard.pollStatusClosed') })}
                 </Label>
-                <Switch id="pollStatusSwitch" checked={isOpen} onCheckedChange={setIsOpen} aria-label={`Toggle poll status, currently ${isOpen ? 'open' : 'closed'}`} />
+                <Switch 
+                    id="pollStatusSwitch" 
+                    checked={isOpen} 
+                    onCheckedChange={setIsOpen} 
+                    aria-label={t('admin.editPoll.togglePollStatusAriaLabel', {status: isOpen ? t('admin.dashboard.pollStatusOpen') : t('admin.dashboard.pollStatusClosed')})} 
+                />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="scheduledCloseTime" className="text-sm flex items-center gap-1">
-                  <CalendarClock className="h-4 w-4" /> Optional: Schedule Close Time
+                  <CalendarClock className="h-4 w-4" /> {t('admin.createPoll.scheduledCloseTimeLabel')}
                 </Label>
                 <Input id="scheduledCloseTime" type="datetime-local" value={scheduledCloseTime} onChange={(e) => setScheduledCloseTime(e.target.value)} className="text-sm" />
-                <p className="text-xs text-muted-foreground">Leave blank or clear to disable automatic closing.</p>
+                <p className="text-xs text-muted-foreground">{t('admin.createPoll.scheduledCloseTimeDescription')}</p>
                 {scheduledCloseTime && new Date(scheduledCloseTime) < new Date() && isOpen && (
-                    <p className="text-xs text-destructive">Warning: Scheduled time is in the past. Poll will close on save if still open.</p>
+                    <p className="text-xs text-destructive">{t('admin.editPoll.scheduledCloseTimeWarningPast')}</p>
                 )}
               </div>
                <div className="flex items-center space-x-3 pt-2">
                 {voteLimitEnabled ? <UserCheck className="h-5 w-5 text-green-500" /> : <Users className="h-5 w-5 text-muted-foreground" />}
                 <Label htmlFor="voteLimitSwitch" className="text-sm flex-grow">
-                  Limit Votes Per Client
+                  {t('admin.createPoll.limitVotesLabel')}
                 </Label>
                 <Switch
                   id="voteLimitSwitch"
                   checked={voteLimitEnabled}
                   onCheckedChange={setVoteLimitEnabled}
-                  aria-label="Toggle vote limit per client"
+                  aria-label={t('admin.createPoll.limitVotesLabel')}
                 />
               </div>
               {voteLimitEnabled && (
                 <div className="space-y-1 pl-8">
-                  <Label htmlFor="maxVotesPerClient" className="text-xs text-muted-foreground">Max Votes Per Client</Label>
+                  <Label htmlFor="maxVotesPerClient" className="text-xs text-muted-foreground">{t('admin.createPoll.maxVotesPerClientLabel')}</Label>
                   <Input
                     id="maxVotesPerClient"
                     type="number"
@@ -331,24 +337,24 @@ export default function EditPollPage() {
                     min="1"
                     className="text-sm h-8 w-24"
                   />
-                  <p className="text-xs text-muted-foreground">Client limits are browser-based and can be bypassed.</p>
+                  <p className="text-xs text-muted-foreground">{t('admin.createPoll.voteLimitBypassNote')}</p>
                 </div>
               )}
               <div className="flex items-center space-x-3 pt-2">
                 {isMultiSelect ? <CheckSquare className="h-5 w-5 text-blue-500" /> : <Square className="h-5 w-5 text-muted-foreground" />}
                 <Label htmlFor="multiSelectSwitch" className="text-sm flex-grow">
-                  Enable Multi-Select
+                  {t('admin.createPoll.enableMultiSelectLabel')}
                 </Label>
                 <Switch
                   id="multiSelectSwitch"
                   checked={isMultiSelect}
                   onCheckedChange={setIsMultiSelect}
-                  aria-label="Toggle multi-select for poll"
+                  aria-label={t('admin.createPoll.enableMultiSelectLabel')}
                 />
               </div>
               {isMultiSelect && (
                 <div className="space-y-1 pl-8">
-                  <Label htmlFor="maxSelections" className="text-xs text-muted-foreground">Maximum Selections</Label>
+                  <Label htmlFor="maxSelections" className="text-xs text-muted-foreground">{t('admin.createPoll.maxSelectionsLabel')}</Label>
                   <Input
                     id="maxSelections"
                     type="number"
@@ -357,14 +363,14 @@ export default function EditPollPage() {
                     min="1"
                     className="text-sm h-8 w-24"
                   />
-                   <p className="text-xs text-muted-foreground">Max number of candidates a user can select.</p>
+                   <p className="text-xs text-muted-foreground">{t('admin.createPoll.maxSelectionsDescription')}</p>
                 </div>
               )}
             </div>
 
 
             <div className="space-y-4">
-              <Label className="text-base font-medium">Candidates</Label>
+              <Label className="text-base font-medium">{t('admin.createPoll.candidatesTitle')}</Label>
               {candidates.length > 0 && (
                 <div className="space-y-3 max-h-60 overflow-y-auto p-2 rounded-md border">
                   {candidates.map((candidate) => (
@@ -373,7 +379,13 @@ export default function EditPollPage() {
                         <Image src={candidate.avatarUrl} alt={candidate.name} width={40} height={40} className="rounded-full object-cover" data-ai-hint={candidate.dataAiHint || 'candidate avatar'} />
                         <span className="text-sm font-medium">{candidate.name}</span>
                       </div>
-                      <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveCandidate(candidate.id)} aria-label={`Remove ${candidate.name}`} className="h-8 w-8 text-muted-foreground hover:text-destructive">
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleRemoveCandidate(candidate.id)} 
+                        aria-label={t('admin.createPoll.removeCandidateAriaLabel', { candidateName: candidate.name })} 
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -382,14 +394,14 @@ export default function EditPollPage() {
               )}
               
               <div className="p-4 border rounded-lg space-y-3 shadow-sm bg-card">
-                 <Label htmlFor="candidateName" className="text-sm font-medium">Add New Candidate</Label>
+                 <Label htmlFor="candidateName" className="text-sm font-medium">{t('admin.createPoll.addNewCandidateLabel')}</Label>
                 <div className="flex flex-col sm:flex-row sm:items-end gap-3">
                   <div className="flex-grow space-y-1">
-                    <Label htmlFor="candidateNameInput" className="text-xs text-muted-foreground">Name</Label>
-                    <Input id="candidateNameInput" type="text" value={currentCandidateName} onChange={(e) => setCurrentCandidateName(e.target.value)} placeholder="Enter candidate name" className="text-sm" />
+                    <Label htmlFor="candidateNameInput" className="text-xs text-muted-foreground">{t('admin.createPoll.candidateNameLabel')}</Label>
+                    <Input id="candidateNameInput" type="text" value={currentCandidateName} onChange={(e) => setCurrentCandidateName(e.target.value)} placeholder={t('admin.createPoll.candidateNamePlaceholder')} className="text-sm" />
                   </div>
                   <div className="space-y-1">
-                     <Label htmlFor="candidateAvatar" className="text-xs text-muted-foreground">Avatar (Optional)</Label>
+                     <Label htmlFor="candidateAvatar" className="text-xs text-muted-foreground">{t('admin.createPoll.candidateAvatarLabel')}</Label>
                     <Input id="candidateAvatar" type="file" accept="image/*" onChange={handleAvatarChange} ref={avatarInputRef} className="text-sm file:mr-2 file:py-1.5 file:px-2 file:rounded-full file:border-0 file:text-xs file:bg-muted file:text-muted-foreground hover:file:bg-primary/10" />
                   </div>
                   {currentCandidateAvatarPreview && (
@@ -398,15 +410,15 @@ export default function EditPollPage() {
                 </div>
                  <Button type="button" variant="outline" onClick={handleAddCandidate} className="w-full sm:w-auto shadow-sm" disabled={!currentCandidateName.trim()}>
                     <PlusCircle className="mr-2 h-4 w-4" />
-                    Add Candidate to Poll
+                    {t('admin.createPoll.addCandidateButton')}
                   </Button>
               </div>
-               {candidates.length === 0 && <p className="text-sm text-muted-foreground text-center pt-2">Add at least two candidates for the poll.</p>}
+               {candidates.length === 0 && <p className="text-sm text-muted-foreground text-center pt-2">{t('admin.createPoll.addAtLeastTwoCandidates')}</p>}
             </div>
           </CardContent>
           <CardFooter className="border-t pt-6">
             <Button type="submit" size="lg" className="w-full shadow-lg" disabled={isLoading || isFetchingPoll || candidates.length < 2}>
-              {isLoading ? 'Updating Poll...' : 'Update Poll'}
+              {isLoading ? t('admin.editPoll.updatingPollButton') : t('admin.editPoll.updatePollButton')}
             </Button>
           </CardFooter>
         </form>
@@ -414,3 +426,5 @@ export default function EditPollPage() {
     </div>
   );
 }
+
+    

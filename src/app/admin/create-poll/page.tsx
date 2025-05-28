@@ -12,12 +12,14 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll, PollCandidate } from '@/lib/types';
 import Image from 'next/image';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const POLLS_STORAGE_KEY = 'eVote_polls_list';
 
 export default function CreatePollPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { t, locale } = useLanguage();
 
   const [pollTitle, setPollTitle] = useState('');
   const [currentCandidateName, setCurrentCandidateName] = useState('');
@@ -57,8 +59,8 @@ export default function CreatePollPage() {
   const handleAddCandidate = async () => {
     if (!currentCandidateName.trim()) {
       toast({
-        title: "Candidate Name Empty",
-        description: "Please enter a name for the candidate.",
+        title: t('toast.candidateNameEmpty'),
+        description: t('toast.candidateNameEmptyDescription'),
         variant: "destructive",
       });
       return;
@@ -79,8 +81,8 @@ export default function CreatePollPage() {
       } catch (error) {
         console.error("Error reading avatar file:", error);
         toast({
-          title: "Avatar Upload Error",
-          description: "Could not process the avatar image. Using default.",
+          title: t('toast.avatarUploadError'),
+          description: t('toast.avatarUploadErrorDescription'),
           variant: "destructive",
         });
       }
@@ -109,40 +111,40 @@ export default function CreatePollPage() {
     event.preventDefault();
     if (!pollTitle.trim()) {
       toast({
-        title: "Poll Title Empty",
-        description: "Please enter a title for the poll.",
+        title: t('toast.pollTitleEmpty'),
+        description: t('toast.pollTitleEmptyDescription'),
         variant: "destructive",
       });
       return;
     }
     if (candidates.length < 2) {
       toast({
-        title: "Not Enough Candidates",
-        description: "A poll must have at least two candidates.",
+        title: t('toast.notEnoughCandidates'),
+        description: t('toast.notEnoughCandidatesDescription'),
         variant: "destructive",
       });
       return;
     }
     if (voteLimitEnabled && maxVotesPerClient < 1) {
       toast({
-        title: "Invalid Vote Limit",
-        description: "Max votes per client must be at least 1 if vote limiting is enabled.",
+        title: t('toast.invalidVoteLimit'),
+        description: t('toast.invalidVoteLimitDescription'),
         variant: "destructive",
       });
       return;
     }
     if (isMultiSelect && maxSelections < 1) {
       toast({
-        title: "Invalid Max Selections",
-        description: "Maximum selections must be at least 1 if multi-select is enabled.",
+        title: t('toast.invalidMaxSelections'),
+        description: t('toast.invalidMaxSelectionsDescription'),
         variant: "destructive",
       });
       return;
     }
     if (isMultiSelect && maxSelections > candidates.length) {
         toast({
-            title: "Invalid Max Selections",
-            description: "Maximum selections cannot exceed the number of candidates.",
+            title: t('toast.invalidMaxSelectionsTooLarge'),
+            description: t('toast.invalidMaxSelectionsTooLargeDescription'),
             variant: "destructive",
         });
         return;
@@ -170,8 +172,8 @@ export default function CreatePollPage() {
       localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify([...existingPolls, newPoll]));
 
       toast({
-        title: "Poll Created!",
-        description: `The poll "${newPoll.title}" has been saved.`,
+        title: t('toast.pollCreatedSuccess'),
+        description: t('toast.pollCreatedSuccessDescription', { title: newPoll.title }),
       });
       setPollTitle('');
       setCandidates([]);
@@ -184,8 +186,8 @@ export default function CreatePollPage() {
     } catch (error) {
       console.error("Failed to save poll:", error);
       toast({
-        title: "Error Saving Poll",
-        description: "An unexpected error occurred. Please try again.",
+        title: t('toast.errorSavingPoll'),
+        description: t('toast.errorSavingPollDescription'),
         variant: "destructive",
       });
     } finally {
@@ -198,29 +200,29 @@ export default function CreatePollPage() {
       <Card className="w-full max-w-2xl shadow-xl">
         <CardHeader className="items-center text-center">
           <ListPlus className="h-12 w-12 text-primary mb-3" />
-          <CardTitle className="text-3xl font-bold">Create New Poll</CardTitle>
-          <CardDescription className="text-lg">Define the title, candidates, and settings for your new poll.</CardDescription>
+          <CardTitle className="text-3xl font-bold">{t('admin.createPoll.title')}</CardTitle>
+          <CardDescription className="text-lg">{t('admin.createPoll.description')}</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6 p-6">
             <div className="space-y-2">
-              <Label htmlFor="pollTitle" className="text-base">Poll Title</Label>
+              <Label htmlFor="pollTitle" className="text-base">{t('admin.createPoll.pollTitleLabel')}</Label>
               <Input
                 id="pollTitle"
                 type="text"
                 value={pollTitle}
                 onChange={(e) => setPollTitle(e.target.value)}
-                placeholder="e.g., Favorite Programming Language"
+                placeholder={t('admin.createPoll.pollTitlePlaceholder')}
                 className="text-base"
                 required
               />
             </div>
 
             <div className="space-y-3 border p-4 rounded-md shadow-sm">
-              <Label className="text-base font-medium">Poll Settings</Label>
+              <Label className="text-base font-medium">{t('admin.createPoll.pollSettingsTitle')}</Label>
               <div className="space-y-2">
                 <Label htmlFor="scheduledCloseTime" className="text-sm flex items-center gap-2">
-                  <CalendarClock className="h-5 w-5" /> Optional: Schedule Close Time
+                  <CalendarClock className="h-5 w-5" /> {t('admin.createPoll.scheduledCloseTimeLabel')}
                 </Label>
                 <Input
                   id="scheduledCloseTime"
@@ -229,24 +231,24 @@ export default function CreatePollPage() {
                   onChange={(e) => setScheduledCloseTime(e.target.value)}
                   className="text-base"
                 />
-                <p className="text-xs text-muted-foreground">Leave blank if you want to close the poll manually.</p>
+                <p className="text-xs text-muted-foreground">{t('admin.createPoll.scheduledCloseTimeDescription')}</p>
               </div>
 
               <div className="flex items-center space-x-3 pt-2">
                 {voteLimitEnabled ? <UserCheck className="h-5 w-5 text-green-500" /> : <Users className="h-5 w-5 text-muted-foreground" />}
                 <Label htmlFor="voteLimitSwitch" className="text-sm flex-grow">
-                  Limit Votes Per Client
+                  {t('admin.createPoll.limitVotesLabel')}
                 </Label>
                 <Switch
                   id="voteLimitSwitch"
                   checked={voteLimitEnabled}
                   onCheckedChange={setVoteLimitEnabled}
-                  aria-label="Toggle vote limit per client"
+                  aria-label={t('admin.createPoll.limitVotesLabel')}
                 />
               </div>
               {voteLimitEnabled && (
                 <div className="space-y-1 pl-8">
-                  <Label htmlFor="maxVotesPerClient" className="text-xs text-muted-foreground">Max Votes Per Client</Label>
+                  <Label htmlFor="maxVotesPerClient" className="text-xs text-muted-foreground">{t('admin.createPoll.maxVotesPerClientLabel')}</Label>
                   <Input
                     id="maxVotesPerClient"
                     type="number"
@@ -255,25 +257,25 @@ export default function CreatePollPage() {
                     min="1"
                     className="text-sm h-8 w-24"
                   />
-                   <p className="text-xs text-muted-foreground">Client limits are browser-based and can be bypassed.</p>
+                   <p className="text-xs text-muted-foreground">{t('admin.createPoll.voteLimitBypassNote')}</p>
                 </div>
               )}
 
               <div className="flex items-center space-x-3 pt-2">
                 {isMultiSelect ? <CheckSquare className="h-5 w-5 text-blue-500" /> : <Square className="h-5 w-5 text-muted-foreground" />}
                 <Label htmlFor="multiSelectSwitch" className="text-sm flex-grow">
-                  Enable Multi-Select
+                  {t('admin.createPoll.enableMultiSelectLabel')}
                 </Label>
                 <Switch
                   id="multiSelectSwitch"
                   checked={isMultiSelect}
                   onCheckedChange={setIsMultiSelect}
-                  aria-label="Toggle multi-select for poll"
+                  aria-label={t('admin.createPoll.enableMultiSelectLabel')}
                 />
               </div>
               {isMultiSelect && (
                 <div className="space-y-1 pl-8">
-                  <Label htmlFor="maxSelections" className="text-xs text-muted-foreground">Maximum Selections</Label>
+                  <Label htmlFor="maxSelections" className="text-xs text-muted-foreground">{t('admin.createPoll.maxSelectionsLabel')}</Label>
                   <Input
                     id="maxSelections"
                     type="number"
@@ -282,14 +284,14 @@ export default function CreatePollPage() {
                     min="1"
                     className="text-sm h-8 w-24"
                   />
-                   <p className="text-xs text-muted-foreground">Max number of candidates a user can select.</p>
+                   <p className="text-xs text-muted-foreground">{t('admin.createPoll.maxSelectionsDescription')}</p>
                 </div>
               )}
             </div>
 
 
             <div className="space-y-4">
-              <Label className="text-base font-medium">Candidates</Label>
+              <Label className="text-base font-medium">{t('admin.createPoll.candidatesTitle')}</Label>
               {candidates.length > 0 && (
                 <div className="space-y-3 max-h-60 overflow-y-auto p-2 rounded-md border">
                   {candidates.map((candidate) => (
@@ -303,7 +305,7 @@ export default function CreatePollPage() {
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRemoveCandidate(candidate.id)}
-                        aria-label={`Remove ${candidate.name}`}
+                        aria-label={t('admin.createPoll.removeCandidateAriaLabel', { candidateName: candidate.name })}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -314,21 +316,21 @@ export default function CreatePollPage() {
               )}
               
               <div className="p-4 border rounded-lg space-y-3 shadow-sm bg-card">
-                 <Label htmlFor="candidateName" className="text-sm font-medium">Add New Candidate</Label>
+                 <Label htmlFor="candidateName" className="text-sm font-medium">{t('admin.createPoll.addNewCandidateLabel')}</Label>
                 <div className="flex flex-col sm:flex-row sm:items-end gap-3">
                   <div className="flex-grow space-y-1">
-                    <Label htmlFor="candidateNameInput" className="text-xs text-muted-foreground">Name</Label>
+                    <Label htmlFor="candidateNameInput" className="text-xs text-muted-foreground">{t('admin.createPoll.candidateNameLabel')}</Label>
                     <Input
                       id="candidateNameInput"
                       type="text"
                       value={currentCandidateName}
                       onChange={(e) => setCurrentCandidateName(e.target.value)}
-                      placeholder="Enter candidate name"
+                      placeholder={t('admin.createPoll.candidateNamePlaceholder')}
                       className="text-sm"
                     />
                   </div>
                   <div className="space-y-1">
-                     <Label htmlFor="candidateAvatar" className="text-xs text-muted-foreground">Avatar (Optional)</Label>
+                     <Label htmlFor="candidateAvatar" className="text-xs text-muted-foreground">{t('admin.createPoll.candidateAvatarLabel')}</Label>
                     <Input
                       id="candidateAvatar"
                       type="file"
@@ -350,15 +352,15 @@ export default function CreatePollPage() {
                     disabled={!currentCandidateName.trim()}
                   >
                     <PlusCircle className="mr-2 h-4 w-4" />
-                    Add Candidate to Poll
+                    {t('admin.createPoll.addCandidateButton')}
                   </Button>
               </div>
-               {candidates.length === 0 && <p className="text-sm text-muted-foreground text-center pt-2">Add at least two candidates for the poll.</p>}
+               {candidates.length === 0 && <p className="text-sm text-muted-foreground text-center pt-2">{t('admin.createPoll.addAtLeastTwoCandidates')}</p>}
             </div>
           </CardContent>
           <CardFooter className="border-t pt-6">
             <Button type="submit" size="lg" className="w-full shadow-lg" disabled={isLoading || candidates.length < 2}>
-              {isLoading ? 'Saving Poll...' : 'Save Poll'}
+              {isLoading ? t('admin.createPoll.savingPollButton') : t('admin.createPoll.savePollButton')}
             </Button>
           </CardFooter>
         </form>
@@ -366,3 +368,5 @@ export default function CreatePollPage() {
     </div>
   );
 }
+
+    

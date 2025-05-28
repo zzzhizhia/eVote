@@ -3,18 +3,21 @@
 
 import Image from 'next/image';
 import type { PollCandidate } from '@/lib/types'; 
-import { CheckCircle, Lock, Square, CheckSquare as CheckSquareIcon } from 'lucide-react'; // Added Square for multi-select unselected
+import { CheckCircle, Lock, Square, CheckSquare as CheckSquareIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface CandidateCardProps {
   candidate: PollCandidate; 
   onSelect: (candidateId: string) => void;
   isSelected: boolean;
   disabled?: boolean; 
-  isMultiSelectPoll?: boolean; // To show different selection indicator
+  isMultiSelectPoll?: boolean;
 }
 
 export default function CandidateCard({ candidate, onSelect, isSelected, disabled = false, isMultiSelectPoll = false }: CandidateCardProps) {
+  const { t } = useLanguage();
+  
   const handleSelect = () => {
     if (!disabled) {
       onSelect(candidate.id);
@@ -22,6 +25,10 @@ export default function CandidateCard({ candidate, onSelect, isSelected, disable
   };
 
   const SelectionIndicatorIcon = isMultiSelectPoll ? (isSelected ? CheckSquareIcon : Square) : CheckCircle;
+
+  const ariaLabel = disabled 
+    ? t('candidateCard.disabledAriaLabel', { candidateName: candidate.name })
+    : t('candidateCard.selectCandidateAriaLabel', { candidateName: candidate.name });
 
   return (
     <div
@@ -36,12 +43,12 @@ export default function CandidateCard({ candidate, onSelect, isSelected, disable
       onKeyDown={(e) => !disabled && (e.key === 'Enter' || e.key === ' ') && handleSelect()}
       aria-pressed={isSelected}
       aria-disabled={disabled}
-      aria-label={disabled ? `${candidate.name} (voting closed or limit reached)` : `Select ${candidate.name}`}
+      aria-label={ariaLabel}
     >
       <div className="relative w-32 h-32 md:w-40 md:h-40 mb-3">
         <Image
           src={candidate.avatarUrl}
-          alt={`Avatar of ${candidate.name}`}
+          alt={t('candidateCard.selectCandidateAriaLabel', { candidateName: candidate.name })} // Alt text can also be translated
           width={160}
           height={160}
           className={cn("rounded-full object-cover border-4", isSelected && !disabled ? "border-primary/70" : "border-muted" )}
@@ -52,7 +59,7 @@ export default function CandidateCard({ candidate, onSelect, isSelected, disable
             <SelectionIndicatorIcon className="w-5 h-5" />
           </div>
         )}
-         {isMultiSelectPoll && !isSelected && !disabled && ( // Show empty square for selectable multi-select items
+         {isMultiSelectPoll && !isSelected && !disabled && ( 
           <div className="absolute bottom-1 right-1 bg-muted rounded-full p-1.5 text-muted-foreground border shadow-sm">
             <Square className="w-5 h-5" />
           </div>
@@ -69,3 +76,5 @@ export default function CandidateCard({ candidate, onSelect, isSelected, disable
     </div>
   );
 }
+
+    

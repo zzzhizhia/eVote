@@ -2,13 +2,14 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation'; // Import useSearchParams
+import { useSearchParams } from 'next/navigation'; 
 import TickerTape from '@/components/results/TickerTape';
 import type { Poll, PollCandidate } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Award, Users, Info, ShieldAlert, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const POLLS_STORAGE_KEY = 'eVote_polls_list';
 const RESULTS_VISIBILITY_KEY = 'eVote_isResultsPublic';
@@ -21,13 +22,14 @@ interface ChartData {
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 export default function ResultsPage() {
-  const searchParams = useSearchParams(); // For getting pollId from URL
+  const searchParams = useSearchParams(); 
+  const { t } = useLanguage();
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [totalVotes, setTotalVotes] = useState(0);
   const [winner, setWinner] = useState<PollCandidate | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [areResultsPublic, setAreResultsPublic] = useState(false);
+  // const [isAdmin, setIsAdmin] = useState(false); // isAdmin is implicitly checked by canViewResults
+  // const [areResultsPublic, setAreResultsPublic] = useState(false); // areResultsPublic is implicitly checked by canViewResults
   const [canViewResults, setCanViewResults] = useState(false);
   const [pollTitleForDisplay, setPollTitleForDisplay] = useState<string | null>(null);
 
@@ -40,13 +42,13 @@ export default function ResultsPage() {
 
     try {
       adminStatus = localStorage.getItem('isAdminAuthenticated') === 'true';
-      setIsAdmin(adminStatus);
+      // setIsAdmin(adminStatus); // Not strictly needed if only canViewResults is used for rendering
 
       const storedVisibility = localStorage.getItem(RESULTS_VISIBILITY_KEY);
       publicVisibility = storedVisibility ? JSON.parse(storedVisibility) : false;
-      setAreResultsPublic(publicVisibility);
-      
-      setCanViewResults(adminStatus || publicVisibility); // Determine if results can be viewed
+      // setAreResultsPublic(publicVisibility); // Not strictly needed
+
+      setCanViewResults(adminStatus || publicVisibility); 
 
       const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
       if (storedPollsRaw) {
@@ -56,12 +58,11 @@ export default function ResultsPage() {
         if (targetPollId) {
           pollToDisplay = storedPolls.find(p => p.id === targetPollId) || null;
         } else if (storedPolls.length > 0) {
-          // Fallback to the latest poll if no specific pollId or if pollId is invalid
           pollToDisplay = storedPolls[storedPolls.length - 1];
         }
         
         setActivePoll(pollToDisplay);
-        setPollTitleForDisplay(pollToDisplay ? pollToDisplay.title : "No Poll Selected");
+        setPollTitleForDisplay(pollToDisplay ? pollToDisplay.title : t('resultsPage.noPollSelected'));
 
 
         if (pollToDisplay) {
@@ -76,16 +77,16 @@ export default function ResultsPage() {
               if (voteCount > maxVotes) {
                 maxVotes = voteCount;
                 currentWinnerId = candidateId;
-              } else if (voteCount === maxVotes) { // Handle ties by nullifying winner if multiple have max_votes
+              } else if (voteCount === maxVotes) { 
                 currentWinnerId = null; 
               }
             }
           }
           setTotalVotes(currentTotalVotes);
-          if (currentWinnerId && maxVotes > 0) { // Ensure there's a unique winner with votes
+          if (currentWinnerId && maxVotes > 0) { 
             setWinner(pollToDisplay.candidates.find(c => c.id === currentWinnerId) || null);
           } else {
-            setWinner(null); // No winner or tie
+            setWinner(null); 
           }
         } else {
            setTotalVotes(0);
@@ -93,16 +94,16 @@ export default function ResultsPage() {
         }
       } else {
         setActivePoll(null);
-        setPollTitleForDisplay("No Polls Available");
+        setPollTitleForDisplay(t('resultsPage.noPollsAvailable'));
       }
     } catch (error) {
       console.error("Error loading data from localStorage:", error);
       setActivePoll(null);
-      setPollTitleForDisplay("Error Loading Poll");
+      setPollTitleForDisplay(t('resultsPage.errorLoadingPoll'));
     }
     
     setIsLoading(false);
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   const chartData: ChartData[] = useMemo(() => {
     if (!activePoll || !activePoll.votes || !canViewResults) return [];
@@ -117,12 +118,12 @@ export default function ResultsPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-10">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="text-lg text-muted-foreground mt-4">Loading results...</p>
+        <p className="text-lg text-muted-foreground mt-4">{t('resultsPage.loading')}</p>
       </div>
     );
   }
 
-  if (!canViewResults) { // Simplified check, admin check is included in canViewResults
+  if (!canViewResults) { 
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-12">
         <Card className="w-full max-w-lg text-center shadow-lg">
@@ -130,11 +131,11 @@ export default function ResultsPage() {
             <div className="flex justify-center mb-3">
               <ShieldAlert className="h-12 w-12 text-destructive" />
             </div>
-            <CardTitle className="text-2xl">Results Not Public</CardTitle>
+            <CardTitle className="text-2xl">{t('resultsPage.resultsNotPublicTitle')}</CardTitle>
           </CardHeader>
           <CardContent>
             <CardDescription className="text-base">
-              The results for this poll are not yet publicly available. Please check back later or contact an administrator.
+              {t('resultsPage.resultsNotPublicDescription')}
             </CardDescription>
           </CardContent>
         </Card>
@@ -150,11 +151,11 @@ export default function ResultsPage() {
             <div className="flex justify-center mb-3">
               <Info className="h-12 w-12 text-primary" />
             </div>
-            <CardTitle className="text-2xl">No Poll Results</CardTitle>
+            <CardTitle className="text-2xl">{t('resultsPage.noPollResultsTitle')}</CardTitle>
           </CardHeader>
           <CardContent>
             <CardDescription className="text-base">
-              {searchParams.get('pollId') ? `Could not find results for the specified poll.` : `There are currently no poll results available. Please create a poll and cast some votes.`}
+              {searchParams.get('pollId') ? t('resultsPage.noPollResultsSpecificDescription') : t('resultsPage.noPollResultsGeneralDescription')}
             </CardDescription>
           </CardContent>
         </Card>
@@ -162,11 +163,10 @@ export default function ResultsPage() {
     );
   }
 
-  // At this point, user can view results (either admin or results are public) and activePoll exists.
   return (
     <div className="flex flex-col items-center space-y-10 py-8">
       <h1 className="text-4xl font-bold tracking-tight text-center text-primary">
-        Results: {pollTitleForDisplay}
+        {t('resultsPage.pageTitle', { pollTitle: pollTitleForDisplay || '' })}
       </h1>
       
       {activePoll.candidates.length > 0 && <TickerTape candidates={activePoll.candidates} />}
@@ -177,12 +177,12 @@ export default function ResultsPage() {
             <div className="flex justify-center mb-2">
               <Award className="h-12 w-12 text-primary" />
             </div>
-            <CardTitle className="text-3xl">Election Winner!</CardTitle>
-            <CardDescription className="text-lg">Congratulations to</CardDescription>
+            <CardTitle className="text-3xl">{t('resultsPage.electionWinnerTitle')}</CardTitle>
+            <CardDescription className="text-lg">{t('resultsPage.congratulationsTo')}</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-4xl font-bold text-primary">{winner.name}</p>
-            <p className="text-xl text-muted-foreground mt-1">with {activePoll.votes?.[winner.id] || 0} votes</p>
+            <p className="text-xl text-muted-foreground mt-1">{t('resultsPage.withXVotes', { count: (activePoll.votes?.[winner.id] || 0).toString() })}</p>
           </CardContent>
         </Card>
       )}
@@ -190,10 +190,10 @@ export default function ResultsPage() {
       {!winner && totalVotes > 0 && (
         <Card className="w-full max-w-md text-center shadow-lg">
           <CardHeader>
-            <CardTitle className="text-2xl">Results Update</CardTitle>
+            <CardTitle className="text-2xl">{t('resultsPage.resultsUpdateTitle')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">There is currently a tie or votes are still being tallied.</p>
+            <p className="text-muted-foreground">{t('resultsPage.tieOrTallying')}</p>
           </CardContent>
         </Card>
       )}
@@ -201,10 +201,10 @@ export default function ResultsPage() {
       {totalVotes === 0 && activePoll.candidates.length > 0 && (
          <Card className="w-full max-w-md text-center shadow-lg">
           <CardHeader>
-            <CardTitle className="text-2xl">Awaiting Votes</CardTitle>
+            <CardTitle className="text-2xl">{t('resultsPage.awaitingVotesTitle')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">No votes have been cast in this poll yet. Be the first!</p>
+            <p className="text-muted-foreground">{t('resultsPage.awaitingVotesDescription')}</p>
           </CardContent>
         </Card>
       )}
@@ -214,9 +214,9 @@ export default function ResultsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-2xl">
             <Users className="h-6 w-6 text-primary" />
-            Vote Distribution
+            {t('resultsPage.voteDistributionTitle')}
           </CardTitle>
-          <CardDescription>Total Votes Cast for "{activePoll.title}": {totalVotes}</CardDescription>
+          <CardDescription>{t('resultsPage.totalVotesCast', { pollTitle: activePoll.title, count: totalVotes.toString() })}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {activePoll.candidates.length > 0 ? (
@@ -228,15 +228,15 @@ export default function ResultsPage() {
                   <div className="flex justify-between items-baseline">
                     <h3 className="text-lg font-medium">{candidate.name}</h3>
                     <p className="text-sm text-muted-foreground">
-                      {candidateVotes} votes ({percentage.toFixed(1)}%)
+                      {t('resultsPage.candidateVoteStats', { count: candidateVotes.toString(), percentage: percentage.toFixed(1) })}
                     </p>
                   </div>
-                  <Progress value={percentage} aria-label={`${candidate.name} vote percentage`} className="h-3 [&>div]:bg-primary" />
+                  <Progress value={percentage} aria-label={t('resultsPage.candidateVoteStats', { count: candidateVotes.toString(), percentage: percentage.toFixed(1) })} className="h-3 [&>div]:bg-primary" />
                 </div>
               );
             })
           ) : (
-            <p className="text-muted-foreground text-center py-4">No candidates found for this poll.</p>
+            <p className="text-muted-foreground text-center py-4">{t('resultsPage.noCandidatesFound')}</p>
           )}
         </CardContent>
       </Card>
@@ -244,7 +244,7 @@ export default function ResultsPage() {
       {chartData.length > 0 && (
          <Card className="w-full max-w-4xl shadow-lg">
             <CardHeader>
-                <CardTitle className="text-2xl">Votes Overview Chart</CardTitle>
+                <CardTitle className="text-2xl">{t('resultsPage.votesOverviewChartTitle')}</CardTitle>
             </CardHeader>
             <CardContent>
                 <ResponsiveContainer width="100%" height={400}>
@@ -257,7 +257,7 @@ export default function ResultsPage() {
                           labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
                         />
                         <Legend wrapperStyle={{ color: 'hsl(var(--muted-foreground))' }} />
-                        <Bar dataKey="votes" name="Votes">
+                        <Bar dataKey="votes" name={t('header.vote')}>
                             {chartData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
@@ -271,3 +271,4 @@ export default function ResultsPage() {
   );
 }
 
+    

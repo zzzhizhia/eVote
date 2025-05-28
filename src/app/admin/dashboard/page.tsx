@@ -24,20 +24,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useLanguage } from '@/contexts/LanguageContext'; // Added for future translations
+import { useLanguage } from '@/contexts/LanguageContext';
 
 
 const RESULTS_VISIBILITY_KEY = 'eVote_isResultsPublic';
-const HOME_PAGE_INTRO_TEXT_KEY = 'eVote_homePageIntroText_'; // Locale will be appended
-const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText_'; // Locale will be appended
+const HOME_PAGE_INTRO_TEXT_KEY = 'eVote_homePageIntroText_'; 
+const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText_'; 
 const POLLS_STORAGE_KEY = 'eVote_polls_list';
 
-// Default intros will now come from translation files or be translated directly
-// const DEFAULT_HOME_INTRO = "We are pleased to announce that the next presidential election will be held soon. This is your opportunity to choose the leader who will best represent your interests. Prepare to learn about the candidates and make an informed decision.";
-// const DEFAULT_VOTE_INTRO = "Review the candidates below and make your selection. Click on a candidate's card to select them, then submit your vote.";
 
-
-// Function to update polls in localStorage if their scheduled close time has passed
 const checkAndUpdatePollStatuses = (polls: Poll[]): Poll[] => {
   const now = new Date();
   let pollsUpdated = false;
@@ -57,7 +52,6 @@ const checkAndUpdatePollStatuses = (polls: Poll[]): Poll[] => {
       localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(updatedPolls));
     } catch (error) {
         console.error("Error auto-updating poll statuses in localStorage:", error);
-        // Potentially toast an error to admin if critical
     }
   }
   return updatedPolls;
@@ -67,11 +61,10 @@ const checkAndUpdatePollStatuses = (polls: Poll[]): Poll[] => {
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { t, locale } = useLanguage(); // Using useLanguage hook
+  const { t, locale } = useLanguage(); 
 
-  // Default intros based on current language
-  const DEFAULT_HOME_INTRO = t('home.defaultIntro');
-  const DEFAULT_VOTE_INTRO = t('vote.defaultIntro', {candidateName: ''}); // Assuming vote.defaultIntro is a key, provide dummy replacement
+  const defaultHomeIntro = t('home.defaultIntro');
+  const defaultVoteIntro = t('votePage.defaultIntro'); 
 
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [isResultsPublic, setIsResultsPublic] = useState(false);
@@ -104,40 +97,37 @@ export default function AdminDashboardPage() {
     } catch (error) {
       console.error("Error reading results visibility from localStorage:", error);
       setIsResultsPublic(false);
-       toast({ title: "Error Loading Settings", description: "Could not load results visibility. Defaulting to private.", variant: "destructive" });
+       toast({ title: t('toast.errorLoadingSettings'), description: t('toast.errorLoadingSettingsVisibilityDescription'), variant: "destructive" });
     }
     setIsLoadingVisibility(false);
     loadPollsFromStorage();
-  }, [router, toast]);
+  }, [router, toast, t]);
 
    useEffect(() => {
-    // Load Home page intro text based on locale
     const currentHomePageIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
     setIsLoadingHomeIntro(true);
     try {
       const storedHomeIntro = localStorage.getItem(currentHomePageIntroKey);
-      setHomeIntroText(storedHomeIntro || DEFAULT_HOME_INTRO);
+      setHomeIntroText(storedHomeIntro || defaultHomeIntro);
     } catch (error) {
       console.error("Error reading home intro text from localStorage:", error);
-      setHomeIntroText(DEFAULT_HOME_INTRO);
-      toast({ title: "Error Loading Home Intro", description: "Could not load home page introductory text.", variant: "destructive" });
+      setHomeIntroText(defaultHomeIntro);
+      toast({ title: t('toast.errorLoadingHomeIntro'), description: t('toast.errorLoadingHomeIntroDescription'), variant: "destructive" });
     }
     setIsLoadingHomeIntro(false);
 
-    // Load Vote page intro text based on locale
     const currentVotePageIntroKey = `${VOTE_PAGE_INTRO_TEXT_KEY}${locale}`;
     setIsLoadingVoteIntro(true);
     try {
       const storedVoteIntro = localStorage.getItem(currentVotePageIntroKey);
-      setVoteIntroText(storedVoteIntro || DEFAULT_VOTE_INTRO);
+      setVoteIntroText(storedVoteIntro || defaultVoteIntro);
     } catch (error) {
       console.error("Error reading vote intro text from localStorage:", error);
-      setVoteIntroText(DEFAULT_VOTE_INTRO);
-      toast({ title: "Error Loading Vote Intro", description: "Could not load vote page introductory text.", variant: "destructive" });
+      setVoteIntroText(defaultVoteIntro);
+      toast({ title: t('toast.errorLoadingVoteIntro'), description: t('toast.errorLoadingVoteIntroDescription'), variant: "destructive" });
     }
     setIsLoadingVoteIntro(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale, DEFAULT_HOME_INTRO, DEFAULT_VOTE_INTRO]);
+  }, [locale, defaultHomeIntro, defaultVoteIntro, t, toast]);
 
 
   const loadPollsFromStorage = () => {
@@ -150,7 +140,7 @@ export default function AdminDashboardPage() {
     } catch (error) {
       console.error("Error reading polls from localStorage:", error);
       setPolls([]);
-      toast({ title: "Error Loading Polls", description: "Could not load existing polls.", variant: "destructive" });
+      toast({ title: t('toast.errorLoadingPolls'), description: t('toast.errorLoadingPollsDescription'), variant: "destructive" });
     }
     setIsLoadingPolls(false);
   };
@@ -163,12 +153,12 @@ export default function AdminDashboardPage() {
       localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(updatedPolls));
       setPolls(updatedPolls); 
       toast({
-        title: `Poll ${!currentStatus ? 'Opened' : 'Closed'}`,
-        description: `The poll is now ${!currentStatus ? 'accepting votes' : 'closed for voting'}.`,
+        title: !currentStatus ? t('toast.pollStatusOpened') : t('toast.pollStatusClosed'),
+        description: t('toast.pollStatusChangedDescription', { status: !currentStatus ? t('toast.pollStatus.acceptingVotes') : t('toast.pollStatus.closedForVoting')}),
       });
     } catch (error) {
       console.error("Error toggling poll status:", error);
-      toast({ title: "Error Updating Poll", description: "Could not update poll status.", variant: "destructive" });
+      toast({ title: t('toast.errorUpdatingPoll'), description: t('toast.errorUpdatingPollDescription'), variant: "destructive" });
     }
   };
 
@@ -177,10 +167,13 @@ export default function AdminDashboardPage() {
     try {
       localStorage.setItem(RESULTS_VISIBILITY_KEY, JSON.stringify(checked));
       setIsResultsPublic(checked);
-      toast({ title: `Results Visibility Updated`, description: `Poll results are now ${checked ? 'PUBLIC' : 'PRIVATE'}.` });
+      toast({ 
+        title: t('toast.resultsVisibilityUpdated'), 
+        description: t('toast.resultsVisibilityUpdatedDescription', { status: checked ? t('toast.resultsVisibility.public') : t('toast.resultsVisibility.private')}) 
+      });
     } catch (error) {
        console.error("Error saving results visibility to localStorage:", error);
-       toast({ title: "Error Saving Settings", description: "Could not save results visibility setting.", variant: "destructive" });
+       toast({ title: t('toast.errorSavingSettings'), description: t('toast.errorSavingSettingsVisibilityDescription'), variant: "destructive" });
     }
   };
 
@@ -188,10 +181,10 @@ export default function AdminDashboardPage() {
     const currentHomePageIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
     try {
       localStorage.setItem(currentHomePageIntroKey, homeIntroText);
-      toast({ title: "Home Page Intro Saved", description: "The introductory text for the home page has been updated." });
+      toast({ title: t('toast.homeIntroSaved'), description: t('toast.homeIntroSavedDescription') });
     } catch (error) {
       console.error("Error saving home intro text to localStorage:", error);
-      toast({ title: "Error Saving Home Intro", description: "Could not save home page introductory text.", variant: "destructive" });
+      toast({ title: t('toast.errorSavingHomeIntro'), description: t('toast.errorLoadingHomeIntroDescription'), variant: "destructive" });
     }
   };
 
@@ -199,10 +192,10 @@ export default function AdminDashboardPage() {
     const currentVotePageIntroKey = `${VOTE_PAGE_INTRO_TEXT_KEY}${locale}`;
     try {
       localStorage.setItem(currentVotePageIntroKey, voteIntroText);
-      toast({ title: "Vote Page Intro Saved", description: "The introductory text for the vote page has been updated." });
+      toast({ title: t('toast.voteIntroSaved'), description: t('toast.voteIntroSavedDescription') });
     } catch (error) {
       console.error("Error saving vote intro text to localStorage:", error);
-      toast({ title: "Error Saving Vote Intro", description: "Could not save vote page introductory text.", variant: "destructive" });
+      toast({ title: t('toast.errorSavingVoteIntro'), description: t('toast.errorLoadingVoteIntroDescription'), variant: "destructive" });
     }
   };
 
@@ -211,10 +204,10 @@ export default function AdminDashboardPage() {
       const updatedPolls = polls.filter(p => p.id !== pollId);
       localStorage.setItem(POLLS_STORAGE_KEY, JSON.stringify(updatedPolls));
       setPolls(updatedPolls);
-      toast({ title: "Poll Deleted", description: "The poll has been successfully deleted." });
+      toast({ title: t('toast.pollDeleted'), description: t('toast.pollDeletedDescription') });
     } catch (error) {
       console.error("Error deleting poll:", error);
-      toast({ title: "Error Deleting Poll", description: "Could not delete the poll.", variant: "destructive" });
+      toast({ title: t('toast.errorDeletingPoll'), description: t('toast.errorDeletingPollDescription'), variant: "destructive" });
     }
   };
   
@@ -224,78 +217,53 @@ export default function AdminDashboardPage() {
         <Card className="w-full max-w-md text-center">
           <CardHeader>
             <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-3" />
-            <CardTitle className="text-2xl">Access Denied</CardTitle>
+            <CardTitle className="text-2xl">{t('admin.dashboard.adminAccessDenied')}</CardTitle>
           </CardHeader>
-          <CardContent><p>You are not authorized to view this page. Redirecting to login...</p></CardContent>
+          <CardContent><p>{t('admin.dashboard.adminAccessDeniedDescription')}</p></CardContent>
         </Card>
       </div>
     );
   }
-
-  // Placeholder for translations - replace these with t('key') once keys are added to JSON files
-  const dashboardTitle = "Admin Dashboard"; 
-  const dashboardDescription = "Manage your eVote application settings and content.";
-  const createNewPollButton = "Create New Poll";
-  const managePollsTitle = "Manage Polls";
-  const loadingPollsText = "Loading polls...";
-  const noPollsYetText = "No polls created yet.";
-  const editButtonText = "Edit";
-  const deleteButtonText = "Delete";
-  const confirmDeleteTitle = "Are you sure?";
-  const confirmDeleteDescription = "This action cannot be undone. This will permanently delete the poll \"{{pollTitle}}\" and all its associated data.";
-  const cancelButtonText = "Cancel";
-  const deletePollButtonText = "Delete Poll";
-  const managePollsFooter = "Toggle poll status, edit details, or delete polls.";
-  const resultsVisibilityTitle = "Results Visibility";
-  const loadingSettingsText = "Loading setting...";
-  const publicText = "Public";
-  const privateText = "Private";
-  const resultsVisibilityFooter = "Controls whether non-admin users can view poll results.";
-  const editHomePageIntroTitle = "Edit Home Page Introduction";
-  const introTextLabel = "Introductory Text";
-  const loadingTextLabel = "Loading text...";
-  const saveHomeIntroButton = "Save Home Intro";
-  const editVotePageIntroTitle = "Edit Vote Page Introduction";
-  const saveVoteIntroButton = "Save Vote Intro";
-
 
   return (
     <div className="flex flex-col items-center py-10 space-y-8">
       <Card className="w-full max-w-xl shadow-xl">
         <CardHeader className="items-center text-center">
           <Settings className="h-12 w-12 text-primary mb-3" />
-          <CardTitle className="text-3xl font-bold">{dashboardTitle}</CardTitle>
-          <CardDescription className="text-lg">{dashboardDescription}</CardDescription>
+          <CardTitle className="text-3xl font-bold">{t('admin.dashboard.title')}</CardTitle>
+          <CardDescription className="text-lg">{t('admin.dashboard.description')}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center space-y-6 p-6">
           <Button asChild size="lg" className="w-full max-w-xs shadow-md hover:shadow-lg transition-shadow">
             <Link href="/admin/create-poll" className="flex items-center">
-              <PlusCircle className="mr-2 h-5 w-5" /> {createNewPollButton}
+              <PlusCircle className="mr-2 h-5 w-5" /> {t('admin.dashboard.createNewPollButton')}
             </Link>
           </Button>
 
           <Card className="w-full max-w-md shadow-md">
             <CardHeader>
               <CardTitle className="text-xl text-center flex items-center justify-center gap-2">
-                <ListChecks className="h-5 w-5" /> {managePollsTitle}
+                <ListChecks className="h-5 w-5" /> {t('admin.dashboard.managePollsTitle')}
               </CardTitle>
             </CardHeader>
             <CardContent className="py-4 space-y-3">
               {isLoadingPolls ? (
-                <p className="text-sm text-muted-foreground text-center">{loadingPollsText}</p>
+                <p className="text-sm text-muted-foreground text-center">{t('admin.dashboard.loadingPolls')}</p>
               ) : polls.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center">{noPollsYetText}</p>
+                <p className="text-sm text-muted-foreground text-center">{t('admin.dashboard.noPollsCreated')}</p>
               ) : (
                 <ul className="space-y-2 max-h-96 overflow-y-auto">
                   {polls.map((poll) => {
-                    let statusText = poll.isOpen ? 'Open' : 'Closed';
+                    let statusTextKey = poll.isOpen ? 'admin.dashboard.pollStatusOpen' : 'admin.dashboard.pollStatusClosed';
                     let statusColor = poll.isOpen ? 'text-green-600' : 'text-red-600';
                     let StatusIcon = poll.isOpen ? CheckCircle : XCircle;
+                    let statusTextParam = {};
 
                     if (poll.isOpen && poll.scheduledCloseTime) {
                       const closeTime = parseISO(poll.scheduledCloseTime);
                       if (new Date() < closeTime) {
-                        statusText = `Scheduled: ${format(closeTime, 'MMM d, p')}`;
+                        statusTextKey = 'admin.dashboard.pollStatusScheduled';
+                        statusTextParam = { time: format(closeTime, 'MMM d, p') };
                         statusColor = 'text-blue-600';
                         StatusIcon = Clock;
                       }
@@ -306,37 +274,37 @@ export default function AdminDashboardPage() {
                         <div className="flex-grow">
                            <span className="text-sm font-medium truncate pr-2 block" title={poll.title}>{poll.title}</span>
                            <div className={`text-xs flex items-center gap-1 ${statusColor}`}>
-                             <StatusIcon className="h-3.5 w-3.5" /> {statusText}
+                             <StatusIcon className="h-3.5 w-3.5" /> {t(statusTextKey, statusTextParam)}
                            </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
                           <Switch 
                             checked={poll.isOpen} 
                             onCheckedChange={() => handleTogglePollStatus(poll.id, poll.isOpen)}
-                            aria-label={`Toggle status for poll ${poll.title}`}
+                            aria-label={t('admin.dashboard.togglePollStatusAriaLabel', { pollTitle: poll.title })}
                             className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
                           />
                           <Button asChild variant="outline" size="sm" className="h-8">
                             <Link href={`/admin/edit-poll/${poll.id}`} className="flex items-center">
-                              <Edit3 className="mr-1.5 h-3.5 w-3.5" /> {editButtonText}
+                              <Edit3 className="mr-1.5 h-3.5 w-3.5" /> {t('admin.dashboard.editButton')}
                             </Link>
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button variant="destructive" size="sm" className="h-8">
-                                <Trash2 className="mr-1.5 h-3.5 w-3.5" /> {deleteButtonText}
+                                <Trash2 className="mr-1.5 h-3.5 w-3.5" /> {t('admin.dashboard.deleteButton')}
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>{confirmDeleteTitle}</AlertDialogTitle>
+                                <AlertDialogTitle>{t('admin.dashboard.confirmDeleteTitle')}</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  {confirmDeleteDescription.replace("{{pollTitle}}", poll.title)}
+                                  {t('admin.dashboard.confirmDeleteDescription', { pollTitle: poll.title })}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>{cancelButtonText}</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeletePoll(poll.id)}>{deletePollButtonText}</AlertDialogAction>
+                                <AlertDialogCancel>{t('admin.dashboard.cancelButton')}</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeletePoll(poll.id)}>{t('admin.dashboard.deletePollButton')}</AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
@@ -348,49 +316,54 @@ export default function AdminDashboardPage() {
               )}
             </CardContent>
              <CardFooter className="text-xs text-muted-foreground text-center pt-3 border-t">
-              <p>{managePollsFooter}</p>
+              <p>{t('admin.dashboard.managePollsFooter')}</p>
             </CardFooter>
           </Card>
 
 
           <Card className="w-full max-w-md shadow-md">
-            <CardHeader><CardTitle className="text-xl text-center">{resultsVisibilityTitle}</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-xl text-center">{t('admin.dashboard.resultsVisibilityTitle')}</CardTitle></CardHeader>
             <CardContent className="flex items-center justify-center space-x-3 py-4">
               {isLoadingVisibility ? (
-                <p className="text-sm text-muted-foreground">{loadingSettingsText}</p>
+                <p className="text-sm text-muted-foreground">{t('admin.dashboard.loadingSettings')}</p>
               ) : (
                 <>
                   <Label htmlFor="results-visibility-switch" className="flex items-center gap-2 cursor-pointer">
                     {isResultsPublic ? <Eye className="h-5 w-5 text-green-500" /> : <EyeOff className="h-5 w-5 text-red-500" />}
-                    <span>{isResultsPublic ? publicText : privateText}</span>
+                    <span>{isResultsPublic ? t('admin.dashboard.resultsVisibilityPublic') : t('admin.dashboard.resultsVisibilityPrivate')}</span>
                   </Label>
-                  <Switch id="results-visibility-switch" checked={isResultsPublic} onCheckedChange={handleResultsVisibilityToggle} aria-label={`Toggle results visibility, currently ${isResultsPublic ? publicText : privateText}`} />
+                  <Switch 
+                    id="results-visibility-switch" 
+                    checked={isResultsPublic} 
+                    onCheckedChange={handleResultsVisibilityToggle} 
+                    aria-label={t('admin.dashboard.resultsVisibilityToggleAriaLabel', { status: isResultsPublic ? t('admin.dashboard.resultsVisibilityPublic') : t('admin.dashboard.resultsVisibilityPrivate')})} 
+                  />
                 </>
               )}
             </CardContent>
-            <CardFooter className="text-xs text-muted-foreground text-center pt-3 border-t"><p>{resultsVisibilityFooter}</p></CardFooter>
+            <CardFooter className="text-xs text-muted-foreground text-center pt-3 border-t"><p>{t('admin.dashboard.resultsVisibilityFooter')}</p></CardFooter>
           </Card>
 
           <Card className="w-full max-w-md shadow-md">
-            <CardHeader><CardTitle className="text-xl text-center flex items-center justify-center gap-2"><PencilLine className="h-5 w-5" /> {editHomePageIntroTitle}</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-xl text-center flex items-center justify-center gap-2"><PencilLine className="h-5 w-5" /> {t('admin.dashboard.editHomePageIntroTitle')}</CardTitle></CardHeader>
             <CardContent className="space-y-2 py-4">
-              <Label htmlFor="homeIntroText">{introTextLabel}</Label>
-              {isLoadingHomeIntro ? ( <p className="text-sm text-muted-foreground">{loadingTextLabel}</p> ) : (
-                <Textarea id="homeIntroText" value={homeIntroText} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setHomeIntroText(e.target.value)} placeholder={DEFAULT_HOME_INTRO} rows={5} className="text-sm" />
+              <Label htmlFor="homeIntroText">{t('admin.dashboard.introTextLabel')}</Label>
+              {isLoadingHomeIntro ? ( <p className="text-sm text-muted-foreground">{t('admin.dashboard.loadingText')}</p> ) : (
+                <Textarea id="homeIntroText" value={homeIntroText} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setHomeIntroText(e.target.value)} placeholder={defaultHomeIntro} rows={5} className="text-sm" />
               )}
             </CardContent>
-            <CardFooter className="border-t pt-4"><Button onClick={handleSaveHomeIntro} className="w-full" disabled={isLoadingHomeIntro}><Save className="mr-2 h-4 w-4" /> {saveHomeIntroButton}</Button></CardFooter>
+            <CardFooter className="border-t pt-4"><Button onClick={handleSaveHomeIntro} className="w-full" disabled={isLoadingHomeIntro}><Save className="mr-2 h-4 w-4" /> {t('admin.dashboard.saveHomeIntroButton')}</Button></CardFooter>
           </Card>
 
           <Card className="w-full max-w-md shadow-md">
-            <CardHeader><CardTitle className="text-xl text-center flex items-center justify-center gap-2"><PencilLine className="h-5 w-5" /> {editVotePageIntroTitle}</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-xl text-center flex items-center justify-center gap-2"><PencilLine className="h-5 w-5" /> {t('admin.dashboard.editVotePageIntroTitle')}</CardTitle></CardHeader>
             <CardContent className="space-y-2 py-4">
-              <Label htmlFor="voteIntroText">{introTextLabel}</Label>
-              {isLoadingVoteIntro ? ( <p className="text-sm text-muted-foreground">{loadingTextLabel}</p> ): (
-                <Textarea id="voteIntroText" value={voteIntroText} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setVoteIntroText(e.target.value)} placeholder={DEFAULT_VOTE_INTRO} rows={4} className="text-sm" />
+              <Label htmlFor="voteIntroText">{t('admin.dashboard.introTextLabel')}</Label>
+              {isLoadingVoteIntro ? ( <p className="text-sm text-muted-foreground">{t('admin.dashboard.loadingText')}</p> ): (
+                <Textarea id="voteIntroText" value={voteIntroText} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setVoteIntroText(e.target.value)} placeholder={defaultVoteIntro} rows={4} className="text-sm" />
               )}
             </CardContent>
-            <CardFooter className="border-t pt-4"><Button onClick={handleSaveVoteIntro} className="w-full" disabled={isLoadingVoteIntro}><Save className="mr-2 h-4 w-4" /> {saveVoteIntroButton}</Button></CardFooter>
+            <CardFooter className="border-t pt-4"><Button onClick={handleSaveVoteIntro} className="w-full" disabled={isLoadingVoteIntro}><Save className="mr-2 h-4 w-4" /> {t('admin.dashboard.saveVoteIntroButton')}</Button></CardFooter>
           </Card>
           
         </CardContent>
@@ -398,3 +371,5 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+
+    
