@@ -12,6 +12,7 @@
   "home.description": "Your voice matters. Make sure to cast your vote and shape the future.",
   "home.defaultIntro": "The election is about to begin! Learn about the candidates and cast your vote!",
   "home.proceedToVoting": "Proceed to Voting",
+  "home.loadingContent": "Loading content...",
 
   "admin.login.title": "Admin Access",
   "admin.login.description": "Enter the password to access the admin section.",
@@ -40,6 +41,8 @@
   "toast.errorLoadingHomeIntroDescription": "Could not load home page introductory text.",
   "toast.errorLoadingVoteIntro": "Error Loading Vote Intro",
   "toast.errorLoadingVoteIntroDescription": "Could not load vote page introductory text.",
+  "toast.errorLoadingTexts": "Error Loading Texts",
+  "toast.errorLoadingTextsDescription": "Could not load customizable texts from the server.",
   "toast.errorLoadingPolls": "Error Loading Polls",
   "toast.errorLoadingPollsDescription": "Could not load existing polls.",
   "toast.pollStatusOpened": "Poll Opened",
@@ -217,7 +220,7 @@
   "resultsPage.selectPollPromptTitle": "Select a Poll",
   "resultsPage.selectPollPromptDescription": "Please select a poll from the dropdown above to view its results.",
 
-  "votePage.loadingPollData": "Loading poll data...",
+  "votePage.loadingPollData": "Loading data...",
   "votePage.noActivePollsTitle": "No Active Polls",
   "votePage.noActivePollsDescription": "There are currently no active polls available for voting. Please check back later.",
   "votePage.selectPollTitle": "Select a Poll to Vote",
@@ -254,6 +257,3 @@
   "candidateCard.selectCandidateAriaLabel": "Select {{candidateName}}",
   "candidateCard.disabledAriaLabel": "{{candidateName}} (voting closed, limit reached, or max selections made)"
 }
-
-
-    

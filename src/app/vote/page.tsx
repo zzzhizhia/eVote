@@ -1,20 +1,20 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import CandidateCard from '@/components/candidates/CandidateCard';
 import { Button } from '@/components/ui/button';
 import type { Poll } from '@/lib/types';
-import { Send, Info, ListChecks, ChevronRight, Lock, Unlock, UserCheck, ShieldAlert, CheckSquare } from 'lucide-react'; // Removed Square as CheckSquare handles both
+import { Send, Info, ListChecks, ChevronRight, Lock, Unlock, UserCheck, ShieldAlert, CheckSquare, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Removed CardFooter
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, parseISO } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext'; 
+import type { CustomTexts } from '@/app/api/custom-texts/route';
 
-const POLLS_STORAGE_KEY = 'eVote_polls_list';
-const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText_'; 
-const CLIENT_POLL_VOTES_KEY = 'eVote_clientPollVotes'; 
+const POLLS_STORAGE_KEY = 'eVote_polls_list'; // Polls remain in localStorage
+const CLIENT_POLL_VOTES_KEY = 'eVote_clientPollVotes'; // Client vote counts remain in localStorage
 
 
 const checkAndUpdatePollStatusesClient = (polls: Poll[]): { updatedPolls: Poll[], wasChanged: boolean } => {
@@ -64,24 +64,28 @@ const saveClientPollVote = (pollId: string) => {
 
 export default function VotePage() {
   const { t, locale } = useLanguage(); 
-  const defaultVoteIntro = t('votePage.defaultIntro'); 
+  const defaultVotePageIntro = t('votePage.defaultIntro'); 
 
   const [allPolls, setAllPolls] = useState<Poll[]>([]);
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [introText, setIntroText] = useState(defaultVoteIntro);
+  const [isLoading, setIsLoading] = useState(true); // For polls
+  const [isLoadingTexts, setIsLoadingTexts] = useState(true); // For custom texts
+  const [fetchedCustomTexts, setFetchedCustomTexts] = useState<CustomTexts | null>(null);
   const [clientVotes, setClientVotes] = useState<{ [pollId: string]: number }>({});
   const router = useRouter();
   const { toast } = useToast();
 
-  const loadData = useCallback(() => {
+
+  const introText = useMemo(() => {
+    if (isLoadingTexts || !fetchedCustomTexts) return defaultVotePageIntro;
+    return fetchedCustomTexts[locale]?.votePageIntroText || defaultVotePageIntro;
+  }, [isLoadingTexts, fetchedCustomTexts, locale, defaultVotePageIntro]);
+
+
+  const loadPollData = useCallback(() => {
     setIsLoading(true);
     try {
-      const currentVotePageIntroKey = `${VOTE_PAGE_INTRO_TEXT_KEY}${locale}`;
-      const storedIntro = localStorage.getItem(currentVotePageIntroKey);
-      setIntroText((storedIntro && storedIntro.trim() !== "") ? storedIntro : defaultVoteIntro);
-
       const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
       let polls: Poll[] = storedPollsRaw ? JSON.parse(storedPollsRaw) : [];
       
@@ -105,25 +109,34 @@ export default function VotePage() {
       }
 
     } catch (error) {
-      console.error("Error loading data from localStorage:", error);
+      console.error("Error loading poll data from localStorage:", error);
       setAllPolls([]);
       setSelectedPoll(null);
       toast({ title: t('toast.errorLoadingData'), description: t('toast.errorLoadingDataDescription'), variant: "destructive" });
     }
     setIsLoading(false);
-  }, [toast, selectedPoll, locale, defaultVoteIntro, t]); 
+  }, [toast, selectedPoll, t]); 
+
+  const fetchTexts = useCallback(async () => {
+    setIsLoadingTexts(true);
+    try {
+      const response = await fetch('/api/custom-texts');
+      if (!response.ok) {
+        throw new Error('Failed to fetch custom texts for vote page');
+      }
+      const data = await response.json();
+      setFetchedCustomTexts(data);
+    } catch (error) {
+      console.error("Error loading custom texts from API for vote page:", error);
+      setFetchedCustomTexts(null); 
+    }
+    setIsLoadingTexts(false);
+  }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
-  
-  useEffect(() => {
-    const currentVotePageIntroKey = `${VOTE_PAGE_INTRO_TEXT_KEY}${locale}`;
-    const storedIntro = localStorage.getItem(currentVotePageIntroKey);
-    if (!storedIntro || storedIntro.trim() === "") {
-       setIntroText(defaultVoteIntro);
-    }
-  }, [defaultVoteIntro, locale]);
+    loadPollData();
+    fetchTexts();
+  }, [loadPollData, fetchTexts]);
 
 
   const handleSelectCandidate = (candidateId: string) => {
@@ -192,7 +205,7 @@ export default function VotePage() {
       const currentPollState = pollsFromStorage[pollIndex];
       if (!currentPollState.isOpen) {
           toast({ title: t('toast.pollJustClosed'), description: t('toast.pollJustClosedDescription'), variant: "destructive" });
-          loadData(); 
+          loadPollData(); 
           return;
       }
 
@@ -229,8 +242,13 @@ export default function VotePage() {
   };
   
 
-  if (isLoading) {
-    return <div className="text-center py-10"><p className="text-lg text-muted-foreground">{t('votePage.loadingPollData')}</p></div>;
+  if (isLoading || isLoadingTexts) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-10">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="text-lg text-muted-foreground mt-4">{t('votePage.loadingPollData')}</p>
+      </div>
+    );
   }
 
   if (allPolls.length === 0) {
@@ -333,7 +351,7 @@ export default function VotePage() {
         <h1 className="text-4xl font-bold tracking-tight text-primary">{selectedPoll.title}</h1>
         <p className="text-lg text-muted-foreground max-w-2xl whitespace-pre-line">{introText}</p>
          {allPolls.length > 1 && (
-            <Button variant="link" onClick={() => { setSelectedPoll(null); setSelectedCandidateIds([]); loadData(); }} className="text-sm">{t('votePage.backToPollList')}</Button>
+            <Button variant="link" onClick={() => { setSelectedPoll(null); setSelectedCandidateIds([]); loadPollData(); }} className="text-sm">{t('votePage.backToPollList')}</Button>
         )}
       </div>
       
@@ -437,5 +455,3 @@ export default function VotePage() {
     </div>
   );
 }
-
-    

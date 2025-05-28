@@ -11,9 +11,6 @@ import { KeyRound, ShieldAlert } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from '@/contexts/LanguageContext';
 
-// In a real app, this should be a Server Action or API call, and password stored securely.
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'admin123'; // Default for demo
-
 export default function PasswordForm() {
   const { t } = useLanguage();
   const [password, setPassword] = useState('');
@@ -27,26 +24,42 @@ export default function PasswordForm() {
     setIsLoading(true);
     setError('');
 
-    // Simulate server-side check
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      const response = await fetch('/api/admin-password');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch admin password');
+      }
+      const data = await response.json();
+      const adminPasswordFromEdgeConfig = data.password;
 
-    if (password === ADMIN_PASSWORD) {
-      toast({
-        title: t('toast.accessGranted'),
-        description: t('toast.accessGrantedDescription'),
-      });
-      // Store a session token or flag in a real app
-      localStorage.setItem('isAdminAuthenticated', 'true'); // Simple flag for demo
-      router.push('/admin/dashboard'); 
-    } else {
-      setError(t('admin.login.invalidPasswordError'));
+      if (password === adminPasswordFromEdgeConfig) {
+        toast({
+          title: t('toast.accessGranted'),
+          description: t('toast.accessGrantedDescription'),
+        });
+        localStorage.setItem('isAdminAuthenticated', 'true'); // Session flag
+        router.push('/admin/dashboard');
+      } else {
+        setError(t('admin.login.invalidPasswordError'));
+        toast({
+          title: t('toast.accessDenied'),
+          description: t('toast.accessDeniedDescription'),
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Password check failed:", err);
+      const errorMessage = err instanceof Error ? err.message : t('admin.login.invalidPasswordError');
+      setError(errorMessage);
       toast({
         title: t('toast.accessDenied'),
-        description: t('toast.accessDeniedDescription'),
+        description: errorMessage,
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (

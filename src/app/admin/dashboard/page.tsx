@@ -1,18 +1,19 @@
 
 'use client';
 
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine, ListChecks, Edit3, Trash2, Clock, ToggleLeft, ToggleRight, CheckCircle, XCircle, FileText, MessageSquareText } from 'lucide-react';
+import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine, ListChecks, Edit3, Trash2, Clock, ToggleLeft, ToggleRight, CheckCircle, XCircle, FileText, MessageSquareText, Loader2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll } from '@/lib/types';
+import type { CustomTexts } from '@/app/api/custom-texts/route';
 import { format, parseISO } from 'date-fns';
 import {
   AlertDialog,
@@ -27,14 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useLanguage } from '@/contexts/LanguageContext';
 
-
-const RESULTS_VISIBILITY_KEY = 'eVote_isResultsPublic';
-const HOME_PAGE_TITLE_KEY = 'eVote_homePageTitle_';
-const HOME_PAGE_DESCRIPTION_KEY = 'eVote_homePageDescription_';
-const HOME_PAGE_INTRO_TEXT_KEY = 'eVote_homePageIntroText_'; 
-const VOTE_PAGE_INTRO_TEXT_KEY = 'eVote_votePageIntroText_'; 
-const POLLS_STORAGE_KEY = 'eVote_polls_list';
-
+const POLLS_STORAGE_KEY = 'eVote_polls_list'; // Polls remain in localStorage for this iteration
 
 const checkAndUpdatePollStatuses = (polls: Poll[]): Poll[] => {
   const now = new Date();
@@ -66,26 +60,34 @@ export default function AdminDashboardPage() {
   const { toast } = useToast();
   const { t, locale } = useLanguage(); 
 
-  const defaultHomeTitle = t('home.title');
-  const defaultHomeDescription = t('home.description');
-  const defaultHomeIntro = t('home.defaultIntro');
-  const defaultVoteIntro = t('votePage.defaultIntro'); 
-
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [isResultsPublic, setIsResultsPublic] = useState(false);
   const [isLoadingVisibility, setIsLoadingVisibility] = useState(true);
 
-  const [homeTitle, setHomeTitle] = useState('');
-  const [homeDescription, setHomeDescription] = useState('');
-  const [homeIntroText, setHomeIntroText] = useState('');
-  const [voteIntroText, setVoteIntroText] = useState('');
-  const [isLoadingHomeTitle, setIsLoadingHomeTitle] = useState(true);
-  const [isLoadingHomeDescription, setIsLoadingHomeDescription] = useState(true);
-  const [isLoadingHomeIntro, setIsLoadingHomeIntro] = useState(true);
-  const [isLoadingVoteIntro, setIsLoadingVoteIntro] = useState(true);
+  const [customTexts, setCustomTexts] = useState<CustomTexts>({});
+  const [isLoadingCustomTexts, setIsLoadingCustomTexts] = useState(true);
 
+  // Local states for input fields, to be synced with customTexts[locale]
+  const [homeTitleInput, setHomeTitleInput] = useState('');
+  const [homeDescriptionInput, setHomeDescriptionInput] = useState('');
+  const [homeIntroTextInput, setHomeIntroTextInput] = useState('');
+  const [voteIntroTextInput, setVoteIntroTextInput] = useState('');
+  
   const [polls, setPolls] = useState<Poll[]>([]);
   const [isLoadingPolls, setIsLoadingPolls] = useState(true);
+
+  const [isSavingVisibility, setIsSavingVisibility] = useState(false);
+  const [isSavingHomeTitle, setIsSavingHomeTitle] = useState(false);
+  const [isSavingHomeDescription, setIsSavingHomeDescription] = useState(false);
+  const [isSavingHomeIntro, setIsSavingHomeIntro] = useState(false);
+  const [isSavingVoteIntro, setIsSavingVoteIntro] = useState(false);
+
+  const defaultTexts = useMemo(() => ({
+    homeTitle: t('home.title'),
+    homeDescription: t('home.description'),
+    homeIntro: t('home.defaultIntro'),
+    voteIntro: t('votePage.defaultIntro'),
+  }), [t]);
 
   useEffect(() => {
     const authStatus = localStorage.getItem('isAdminAuthenticated') === 'true';
@@ -95,73 +97,66 @@ export default function AdminDashboardPage() {
       return; 
     }
 
-    try {
-      const storedVisibility = localStorage.getItem(RESULTS_VISIBILITY_KEY);
-      if (storedVisibility !== null) {
-        setIsResultsPublic(JSON.parse(storedVisibility));
-      } else {
-        setIsResultsPublic(false); 
-        localStorage.setItem(RESULTS_VISIBILITY_KEY, JSON.stringify(false));
+    // Fetch results visibility
+    const fetchVisibility = async () => {
+      setIsLoadingVisibility(true);
+      try {
+        const response = await fetch('/api/results-visibility');
+        if (!response.ok) throw new Error('Failed to fetch visibility');
+        const data = await response.json();
+        setIsResultsPublic(data.isPublic);
+      } catch (error) {
+        console.error("Error fetching results visibility:", error);
+        setIsResultsPublic(false); // Default to private on error
+        toast({ title: t('toast.errorLoadingSettings'), description: t('toast.errorLoadingSettingsVisibilityDescription'), variant: "destructive" });
       }
-    } catch (error) {
-      console.error("Error reading results visibility from localStorage:", error);
-      setIsResultsPublic(false);
-       toast({ title: t('toast.errorLoadingSettings'), description: t('toast.errorLoadingSettingsVisibilityDescription'), variant: "destructive" });
-    }
-    setIsLoadingVisibility(false);
+      setIsLoadingVisibility(false);
+    };
+
+    fetchVisibility();
     loadPollsFromStorage();
   }, [router, toast, t]);
 
-   useEffect(() => {
-    const currentHomePageTitleKey = `${HOME_PAGE_TITLE_KEY}${locale}`;
-    setIsLoadingHomeTitle(true);
+  const fetchCustomTexts = useCallback(async () => {
+    setIsLoadingCustomTexts(true);
     try {
-      const storedHomeTitle = localStorage.getItem(currentHomePageTitleKey);
-      setHomeTitle(storedHomeTitle || defaultHomeTitle);
-    } catch (error) {
-        console.error("Error reading home page title from localStorage:", error);
-        setHomeTitle(defaultHomeTitle);
-        toast({ title: t('toast.errorLoadingHomeTitle'), description: t('toast.errorLoadingHomeTitleDescription'), variant: "destructive"});
-    }
-    setIsLoadingHomeTitle(false);
+      const response = await fetch('/api/custom-texts');
+      if (!response.ok) throw new Error('Failed to fetch custom texts');
+      const data = await response.json() as CustomTexts;
+      setCustomTexts(data);
+      // Initialize input fields based on fetched data and current locale
+      setHomeTitleInput(data[locale]?.homePageTitle || defaultTexts.homeTitle);
+      setHomeDescriptionInput(data[locale]?.homePageDescription || defaultTexts.homeDescription);
+      setHomeIntroTextInput(data[locale]?.homePageIntroText || defaultTexts.homeIntro);
+      setVoteIntroTextInput(data[locale]?.votePageIntroText || defaultTexts.voteIntro);
 
-    const currentHomePageDescriptionKey = `${HOME_PAGE_DESCRIPTION_KEY}${locale}`;
-    setIsLoadingHomeDescription(true);
-    try {
-        const storedHomeDescription = localStorage.getItem(currentHomePageDescriptionKey);
-        setHomeDescription(storedHomeDescription || defaultHomeDescription);
     } catch (error) {
-        console.error("Error reading home page description from localStorage:", error);
-        setHomeDescription(defaultHomeDescription);
-        toast({ title: t('toast.errorLoadingHomeDescription'), description: t('toast.errorLoadingHomeDescriptionDescription'), variant: "destructive"});
+      console.error("Error fetching custom texts:", error);
+      toast({ title: t('toast.errorLoadingTexts'), description: t('toast.errorLoadingTextsDescription'), variant: "destructive" });
+      // Set inputs to default on error
+      setHomeTitleInput(defaultTexts.homeTitle);
+      setHomeDescriptionInput(defaultTexts.homeDescription);
+      setHomeIntroTextInput(defaultTexts.homeIntro);
+      setVoteIntroTextInput(defaultTexts.voteIntro);
     }
-    setIsLoadingHomeDescription(false);
+    setIsLoadingCustomTexts(false);
+  }, [locale, toast, t, defaultTexts]);
 
-
-    const currentHomePageIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
-    setIsLoadingHomeIntro(true);
-    try {
-      const storedHomeIntro = localStorage.getItem(currentHomePageIntroKey);
-      setHomeIntroText(storedHomeIntro || defaultHomeIntro);
-    } catch (error) {
-      console.error("Error reading home intro text from localStorage:", error);
-      setHomeIntroText(defaultHomeIntro);
-      toast({ title: t('toast.errorLoadingHomeIntro'), description: t('toast.errorLoadingHomeIntroDescription'), variant: "destructive" });
+  useEffect(() => {
+    if(isAdminAuthenticated) {
+      fetchCustomTexts();
     }
-    setIsLoadingHomeIntro(false);
-
-    const currentVotePageIntroKey = `${VOTE_PAGE_INTRO_TEXT_KEY}${locale}`;
-    setIsLoadingVoteIntro(true);
-    try {
-      const storedVoteIntro = localStorage.getItem(currentVotePageIntroKey);
-      setVoteIntroText(storedVoteIntro || defaultVoteIntro);
-    } catch (error) {
-      console.error("Error reading vote intro text from localStorage:", error);
-      setVoteIntroText(defaultVoteIntro);
-      toast({ title: t('toast.errorLoadingVoteIntro'), description: t('toast.errorLoadingVoteIntroDescription'), variant: "destructive" });
+  }, [isAdminAuthenticated, fetchCustomTexts]);
+  
+  // Update input fields when locale changes and customTexts are loaded
+  useEffect(() => {
+    if (!isLoadingCustomTexts) {
+      setHomeTitleInput(customTexts[locale]?.homePageTitle || defaultTexts.homeTitle);
+      setHomeDescriptionInput(customTexts[locale]?.homePageDescription || defaultTexts.homeDescription);
+      setHomeIntroTextInput(customTexts[locale]?.homePageIntroText || defaultTexts.homeIntro);
+      setVoteIntroTextInput(customTexts[locale]?.votePageIntroText || defaultTexts.voteIntro);
     }
-    setIsLoadingVoteIntro(false);
-  }, [locale, defaultHomeTitle, defaultHomeDescription, defaultHomeIntro, defaultVoteIntro, t, toast]);
+  }, [locale, customTexts, isLoadingCustomTexts, defaultTexts]);
 
 
   const loadPollsFromStorage = () => {
@@ -196,63 +191,49 @@ export default function AdminDashboardPage() {
     }
   };
 
-
-  const handleResultsVisibilityToggle = (checked: boolean) => {
+  const handleResultsVisibilityToggle = async (checked: boolean) => {
+    setIsSavingVisibility(true);
     try {
-      localStorage.setItem(RESULTS_VISIBILITY_KEY, JSON.stringify(checked));
+      const response = await fetch('/api/results-visibility', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublic: checked }),
+      });
+      if (!response.ok) throw new Error('Failed to update visibility');
       setIsResultsPublic(checked);
       toast({ 
         title: t('toast.resultsVisibilityUpdated'), 
         description: t('toast.resultsVisibilityUpdatedDescription', { status: checked ? t('toast.resultsVisibility.public') : t('toast.resultsVisibility.private')}) 
       });
     } catch (error) {
-       console.error("Error saving results visibility to localStorage:", error);
+       console.error("Error saving results visibility:", error);
        toast({ title: t('toast.errorSavingSettings'), description: t('toast.errorSavingSettingsVisibilityDescription'), variant: "destructive" });
     }
+    setIsSavingVisibility(false);
   };
 
-  const handleSaveHomeTitle = () => {
-    const currentHomePageTitleKey = `${HOME_PAGE_TITLE_KEY}${locale}`;
-    try {
-        localStorage.setItem(currentHomePageTitleKey, homeTitle);
-        toast({ title: t('toast.homeTitleSaved'), description: t('toast.homeTitleSavedDescription') });
-    } catch (error) {
-        console.error("Error saving home page title to localStorage:", error);
-        toast({ title: t('toast.errorSavingHomeTitle'), description: t('toast.errorSavingHomeTitleDescription'), variant: "destructive" });
+  const handleSaveCustomText = async (textKey: keyof CustomTexts[string], value: string, setLoadingState: (loading: boolean) => void, successToastTitle: string, successToastDesc: string, errorToastTitle: string, errorToastDesc: string) => {
+    setLoadingState(true);
+    const newCustomTexts = JSON.parse(JSON.stringify(customTexts)) as CustomTexts;
+    if (!newCustomTexts[locale]) {
+      newCustomTexts[locale] = {};
     }
-  };
+    (newCustomTexts[locale] as any)[textKey] = value;
 
-  const handleSaveHomeDescription = () => {
-    const currentHomePageDescriptionKey = `${HOME_PAGE_DESCRIPTION_KEY}${locale}`;
     try {
-        localStorage.setItem(currentHomePageDescriptionKey, homeDescription);
-        toast({ title: t('toast.homeDescriptionSaved'), description: t('toast.homeDescriptionSavedDescription') });
+      const response = await fetch('/api/custom-texts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCustomTexts),
+      });
+      if (!response.ok) throw new Error('Failed to save custom text');
+      setCustomTexts(newCustomTexts); // Update local state on conceptual success
+      toast({ title: t(successToastTitle), description: t(successToastDesc) });
     } catch (error) {
-        console.error("Error saving home page description to localStorage:", error);
-        toast({ title: t('toast.errorSavingHomeDescription'), description: t('toast.errorSavingHomeDescriptionDescription'), variant: "destructive" });
+      console.error(`Error saving ${textKey}:`, error);
+      toast({ title: t(errorToastTitle), description: t(errorToastDesc), variant: "destructive" });
     }
-  };
-
-  const handleSaveHomeIntro = () => {
-    const currentHomePageIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
-    try {
-      localStorage.setItem(currentHomePageIntroKey, homeIntroText);
-      toast({ title: t('toast.homeIntroSaved'), description: t('toast.homeIntroSavedDescription') });
-    } catch (error) {
-      console.error("Error saving home intro text to localStorage:", error);
-      toast({ title: t('toast.errorSavingHomeIntro'), description: t('toast.errorLoadingHomeIntroDescription'), variant: "destructive" });
-    }
-  };
-
-  const handleSaveVoteIntro = () => {
-    const currentVotePageIntroKey = `${VOTE_PAGE_INTRO_TEXT_KEY}${locale}`;
-    try {
-      localStorage.setItem(currentVotePageIntroKey, voteIntroText);
-      toast({ title: t('toast.voteIntroSaved'), description: t('toast.voteIntroSavedDescription') });
-    } catch (error) {
-      console.error("Error saving vote intro text to localStorage:", error);
-      toast({ title: t('toast.errorSavingVoteIntro'), description: t('toast.errorLoadingVoteIntroDescription'), variant: "destructive" });
-    }
+    setLoadingState(false);
   };
 
   const handleDeletePoll = (pollId: string) => {
@@ -280,6 +261,10 @@ export default function AdminDashboardPage() {
       </div>
     );
   }
+
+  const CurrentIcon = ({ isLoading }: { isLoading: boolean }) => 
+    isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />;
+
 
   return (
     <div className="flex flex-col items-center py-10 space-y-8">
@@ -376,12 +361,11 @@ export default function AdminDashboardPage() {
             </CardFooter>
           </Card>
 
-
           <Card className="w-full max-w-md shadow-md">
             <CardHeader><CardTitle className="text-xl text-center">{t('admin.dashboard.resultsVisibilityTitle')}</CardTitle></CardHeader>
             <CardContent className="flex items-center justify-center space-x-3 py-4">
               {isLoadingVisibility ? (
-                <p className="text-sm text-muted-foreground">{t('admin.dashboard.loadingSettings')}</p>
+                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               ) : (
                 <>
                   <Label htmlFor="results-visibility-switch" className="flex items-center gap-2 cursor-pointer">
@@ -392,6 +376,7 @@ export default function AdminDashboardPage() {
                     id="results-visibility-switch" 
                     checked={isResultsPublic} 
                     onCheckedChange={handleResultsVisibilityToggle} 
+                    disabled={isSavingVisibility}
                     aria-label={t('admin.dashboard.resultsVisibilityToggleAriaLabel', { status: isResultsPublic ? t('admin.dashboard.resultsVisibilityPublic') : t('admin.dashboard.resultsVisibilityPrivate')})} 
                   />
                 </>
@@ -404,52 +389,75 @@ export default function AdminDashboardPage() {
             <CardHeader><CardTitle className="text-xl text-center flex items-center justify-center gap-2"><FileText className="h-5 w-5" /> {t('admin.dashboard.editHomePageTitleCardTitle')}</CardTitle></CardHeader>
             <CardContent className="space-y-2 py-4">
               <Label htmlFor="homeTitleInput">{t('admin.dashboard.homePageTitleLabel')}</Label>
-              {isLoadingHomeTitle ? ( <p className="text-sm text-muted-foreground">{t('admin.dashboard.loadingText')}</p> ) : (
-                <Input id="homeTitleInput" value={homeTitle} onChange={(e: ChangeEvent<HTMLInputElement>) => setHomeTitle(e.target.value)} placeholder={t('admin.dashboard.homePageTitlePlaceholder')} className="text-sm" />
+              {isLoadingCustomTexts ? ( <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> ) : (
+                <Input id="homeTitleInput" value={homeTitleInput} onChange={(e: ChangeEvent<HTMLInputElement>) => setHomeTitleInput(e.target.value)} placeholder={t('admin.dashboard.homePageTitlePlaceholder')} className="text-sm" />
               )}
             </CardContent>
-            <CardFooter className="border-t pt-4"><Button onClick={handleSaveHomeTitle} className="w-full" disabled={isLoadingHomeTitle}><Save className="mr-2 h-4 w-4" /> {t('admin.dashboard.saveHomePageTitleButton')}</Button></CardFooter>
+            <CardFooter className="border-t pt-4">
+              <Button 
+                onClick={() => handleSaveCustomText('homePageTitle', homeTitleInput, setIsSavingHomeTitle, 'toast.homeTitleSaved', 'toast.homeTitleSavedDescription', 'toast.errorSavingHomeTitle', 'toast.errorSavingHomeTitleDescription')} 
+                className="w-full" 
+                disabled={isLoadingCustomTexts || isSavingHomeTitle}>
+                 <CurrentIcon isLoading={isSavingHomeTitle} /> {t('admin.dashboard.saveHomePageTitleButton')}
+              </Button>
+            </CardFooter>
           </Card>
           
           <Card className="w-full max-w-md shadow-md">
             <CardHeader><CardTitle className="text-xl text-center flex items-center justify-center gap-2"><MessageSquareText className="h-5 w-5" /> {t('admin.dashboard.editHomePageDescriptionCardTitle')}</CardTitle></CardHeader>
             <CardContent className="space-y-2 py-4">
               <Label htmlFor="homeDescriptionTextarea">{t('admin.dashboard.homePageDescriptionLabel')}</Label>
-              {isLoadingHomeDescription ? ( <p className="text-sm text-muted-foreground">{t('admin.dashboard.loadingText')}</p> ) : (
-                <Textarea id="homeDescriptionTextarea" value={homeDescription} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setHomeDescription(e.target.value)} placeholder={t('admin.dashboard.homePageDescriptionPlaceholder')} rows={3} className="text-sm" />
+              {isLoadingCustomTexts ? ( <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> ) : (
+                <Textarea id="homeDescriptionTextarea" value={homeDescriptionInput} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setHomeDescriptionInput(e.target.value)} placeholder={t('admin.dashboard.homePageDescriptionPlaceholder')} rows={3} className="text-sm" />
               )}
             </CardContent>
-            <CardFooter className="border-t pt-4"><Button onClick={handleSaveHomeDescription} className="w-full" disabled={isLoadingHomeDescription}><Save className="mr-2 h-4 w-4" /> {t('admin.dashboard.saveHomePageDescriptionButton')}</Button></CardFooter>
+            <CardFooter className="border-t pt-4">
+              <Button 
+                onClick={() => handleSaveCustomText('homePageDescription', homeDescriptionInput, setIsSavingHomeDescription, 'toast.homeDescriptionSaved', 'toast.homeDescriptionSavedDescription', 'toast.errorSavingHomeDescription', 'toast.errorSavingHomeDescriptionDescription')} 
+                className="w-full" 
+                disabled={isLoadingCustomTexts || isSavingHomeDescription}>
+                <CurrentIcon isLoading={isSavingHomeDescription} /> {t('admin.dashboard.saveHomePageDescriptionButton')}
+              </Button>
+            </CardFooter>
           </Card>
 
           <Card className="w-full max-w-md shadow-md">
             <CardHeader><CardTitle className="text-xl text-center flex items-center justify-center gap-2"><PencilLine className="h-5 w-5" /> {t('admin.dashboard.editHomePageIntroTitle')}</CardTitle></CardHeader>
             <CardContent className="space-y-2 py-4">
               <Label htmlFor="homeIntroText">{t('admin.dashboard.introTextLabel')}</Label>
-              {isLoadingHomeIntro ? ( <p className="text-sm text-muted-foreground">{t('admin.dashboard.loadingText')}</p> ) : (
-                <Textarea id="homeIntroText" value={homeIntroText} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setHomeIntroText(e.target.value)} placeholder={defaultHomeIntro} rows={5} className="text-sm" />
+              {isLoadingCustomTexts ? (  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />  ) : (
+                <Textarea id="homeIntroText" value={homeIntroTextInput} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setHomeIntroTextInput(e.target.value)} placeholder={defaultTexts.homeIntro} rows={5} className="text-sm" />
               )}
             </CardContent>
-            <CardFooter className="border-t pt-4"><Button onClick={handleSaveHomeIntro} className="w-full" disabled={isLoadingHomeIntro}><Save className="mr-2 h-4 w-4" /> {t('admin.dashboard.saveHomeIntroButton')}</Button></CardFooter>
+            <CardFooter className="border-t pt-4">
+              <Button 
+                onClick={() => handleSaveCustomText('homePageIntroText', homeIntroTextInput, setIsSavingHomeIntro, 'toast.homeIntroSaved', 'toast.homeIntroSavedDescription', 'toast.errorSavingHomeIntro', 'toast.errorLoadingHomeIntroDescription')} 
+                className="w-full" 
+                disabled={isLoadingCustomTexts || isSavingHomeIntro}>
+                <CurrentIcon isLoading={isSavingHomeIntro} /> {t('admin.dashboard.saveHomeIntroButton')}
+              </Button>
+            </CardFooter>
           </Card>
 
           <Card className="w-full max-w-md shadow-md">
             <CardHeader><CardTitle className="text-xl text-center flex items-center justify-center gap-2"><PencilLine className="h-5 w-5" /> {t('admin.dashboard.editVotePageIntroTitle')}</CardTitle></CardHeader>
             <CardContent className="space-y-2 py-4">
               <Label htmlFor="voteIntroText">{t('admin.dashboard.introTextLabel')}</Label>
-              {isLoadingVoteIntro ? ( <p className="text-sm text-muted-foreground">{t('admin.dashboard.loadingText')}</p> ): (
-                <Textarea id="voteIntroText" value={voteIntroText} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setVoteIntroText(e.target.value)} placeholder={defaultVoteIntro} rows={4} className="text-sm" />
+              {isLoadingCustomTexts ? ( <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> ): (
+                <Textarea id="voteIntroText" value={voteIntroTextInput} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setVoteIntroTextInput(e.target.value)} placeholder={defaultTexts.voteIntro} rows={4} className="text-sm" />
               )}
             </CardContent>
-            <CardFooter className="border-t pt-4"><Button onClick={handleSaveVoteIntro} className="w-full" disabled={isLoadingVoteIntro}><Save className="mr-2 h-4 w-4" /> {t('admin.dashboard.saveVoteIntroButton')}</Button></CardFooter>
+            <CardFooter className="border-t pt-4">
+              <Button 
+                onClick={() => handleSaveCustomText('votePageIntroText', voteIntroTextInput, setIsSavingVoteIntro, 'toast.voteIntroSaved', 'toast.voteIntroSavedDescription', 'toast.errorSavingVoteIntro', 'toast.errorLoadingVoteIntroDescription')} 
+                className="w-full" 
+                disabled={isLoadingCustomTexts || isSavingVoteIntro}>
+                <CurrentIcon isLoading={isSavingVoteIntro} /> {t('admin.dashboard.saveVoteIntroButton')}
+              </Button>
+            </CardFooter>
           </Card>
-          
         </CardContent>
       </Card>
     </div>
   );
 }
-
-    
-
-    

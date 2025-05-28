@@ -8,10 +8,11 @@
   "header.language.english": "English",
   "header.language.chinese": "中文",
 
-  "home.title": "选举即将开始",
+  "home.title": "选举即将开始！",
   "home.description": "您的声音至关重要。请务必投下您的一票，塑造未来。",
   "home.defaultIntro": "选举即将开始！了解候选人并投出你的一票！",
   "home.proceedToVoting": "前往投票",
+  "home.loadingContent": "正在加载内容...",
 
   "admin.login.title": "管理员访问",
   "admin.login.description": "输入密码以访问管理后台。",
@@ -40,6 +41,8 @@
   "toast.errorLoadingHomeIntroDescription": "无法加载主页介绍文本。",
   "toast.errorLoadingVoteIntro": "加载投票页介绍失败",
   "toast.errorLoadingVoteIntroDescription": "无法加载投票页介绍文本。",
+  "toast.errorLoadingTexts": "加载文本失败",
+  "toast.errorLoadingTextsDescription": "无法从服务器加载可自定义的文本。",
   "toast.errorLoadingPolls": "加载投票列表失败",
   "toast.errorLoadingPollsDescription": "无法加载现有投票。",
   "toast.pollStatusOpened": "投票已开放",
@@ -217,7 +220,7 @@
   "resultsPage.selectPollPromptTitle": "选择一个投票",
   "resultsPage.selectPollPromptDescription": "请从上面的下拉列表中选择一个投票以查看其结果。",
 
-  "votePage.loadingPollData": "正在加载投票数据...",
+  "votePage.loadingPollData": "正在加载数据...",
   "votePage.noActivePollsTitle": "无有效投票",
   "votePage.noActivePollsDescription": "当前没有可供投票的有效投票。请稍后再查看。",
   "votePage.selectPollTitle": "选择一个投票进行投票",
@@ -254,6 +257,3 @@
   "candidateCard.selectCandidateAriaLabel": "选择 {{candidateName}}",
   "candidateCard.disabledAriaLabel": "{{candidateName}} (投票已关闭、达到限制或已达最大选择数)"
 }
-
-
-    

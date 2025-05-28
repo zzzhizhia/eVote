@@ -1,77 +1,68 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Megaphone, VoteIcon } from 'lucide-react';
+import { Megaphone, VoteIcon, Loader2 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
-
-const HOME_PAGE_TITLE_KEY = 'eVote_homePageTitle_';
-const HOME_PAGE_DESCRIPTION_KEY = 'eVote_homePageDescription_';
-const HOME_PAGE_INTRO_TEXT_KEY = 'eVote_homePageIntroText_';
+import type { CustomTexts } from '@/app/api/custom-texts/route';
 
 export default function HomePage() {
   const { t, locale } = useLanguage();
-  const [displayTitle, setDisplayTitle] = useState('');
-  const [displayDescription, setDisplayDescription] = useState('');
-  const [introParagraph, setIntroParagraph] = useState('');
+  const [isLoadingTexts, setIsLoadingTexts] = useState(true);
+  const [fetchedCustomTexts, setFetchedCustomTexts] = useState<CustomTexts | null>(null);
 
-  const defaultHomeTitle = t('home.title');
-  const defaultHomeDescription = t('home.description');
-  const defaultHomeIntroParagraph = t('home.defaultIntro');
+  const defaultTexts = useMemo(() => ({
+    title: t('home.title'),
+    description: t('home.description'),
+    introParagraph: t('home.defaultIntro'),
+  }), [t]);
 
+  const fetchTexts = useCallback(async () => {
+    setIsLoadingTexts(true);
+    try {
+      const response = await fetch('/api/custom-texts');
+      if (!response.ok) {
+        throw new Error('Failed to fetch custom texts');
+      }
+      const data = await response.json();
+      setFetchedCustomTexts(data);
+    } catch (error) {
+      console.error("Error loading custom texts from API:", error);
+      setFetchedCustomTexts(null); // Fallback to defaults on error
+    }
+    setIsLoadingTexts(false);
+  }, []);
 
   useEffect(() => {
-    const currentLocaleTitleKey = `${HOME_PAGE_TITLE_KEY}${locale}`;
-    try {
-        const storedTitle = localStorage.getItem(currentLocaleTitleKey);
-        setDisplayTitle((storedTitle && storedTitle.trim() !== "") ? storedTitle : defaultHomeTitle);
-    } catch (error) {
-        console.error("Error loading home page title from localStorage:", error);
-        setDisplayTitle(defaultHomeTitle);
-    }
+    fetchTexts();
+  }, [fetchTexts]);
 
-    const currentLocaleDescriptionKey = `${HOME_PAGE_DESCRIPTION_KEY}${locale}`;
-    try {
-        const storedDescription = localStorage.getItem(currentLocaleDescriptionKey);
-        setDisplayDescription((storedDescription && storedDescription.trim() !== "") ? storedDescription : defaultHomeDescription);
-    } catch (error) {
-        console.error("Error loading home page description from localStorage:", error);
-        setDisplayDescription(defaultHomeDescription);
-    }
+  const displayTitle = useMemo(() => {
+    if (isLoadingTexts || !fetchedCustomTexts) return defaultTexts.title;
+    return fetchedCustomTexts[locale]?.homePageTitle || defaultTexts.title;
+  }, [isLoadingTexts, fetchedCustomTexts, locale, defaultTexts.title]);
 
-    const currentLocaleIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
-    try {
-      const storedIntro = localStorage.getItem(currentLocaleIntroKey);
-      setIntroParagraph((storedIntro && storedIntro.trim() !== "") ? storedIntro : defaultHomeIntroParagraph);
-    } catch (error) { 
-      console.error("Error loading home page intro from localStorage:", error);
-      setIntroParagraph(defaultHomeIntroParagraph);
-    } 
-  }, [locale, defaultHomeTitle, defaultHomeDescription, defaultHomeIntroParagraph, t]); 
-  
-  useEffect(() => {
-    const currentLocaleTitleKey = `${HOME_PAGE_TITLE_KEY}${locale}`;
-    const storedTitle = localStorage.getItem(currentLocaleTitleKey);
-    if (!storedTitle || storedTitle.trim() === "") {
-       setDisplayTitle(defaultHomeTitle);
-    }
+  const displayDescription = useMemo(() => {
+    if (isLoadingTexts || !fetchedCustomTexts) return defaultTexts.description;
+    return fetchedCustomTexts[locale]?.homePageDescription || defaultTexts.description;
+  }, [isLoadingTexts, fetchedCustomTexts, locale, defaultTexts.description]);
 
-    const currentLocaleDescriptionKey = `${HOME_PAGE_DESCRIPTION_KEY}${locale}`;
-    const storedDescription = localStorage.getItem(currentLocaleDescriptionKey);
-    if (!storedDescription || storedDescription.trim() === "") {
-       setDisplayDescription(defaultHomeDescription);
-    }
+  const introParagraph = useMemo(() => {
+    if (isLoadingTexts || !fetchedCustomTexts) return defaultTexts.introParagraph;
+    return fetchedCustomTexts[locale]?.homePageIntroText || defaultTexts.introParagraph;
+  }, [isLoadingTexts, fetchedCustomTexts, locale, defaultTexts.introParagraph]);
 
-    const currentLocaleIntroKey = `${HOME_PAGE_INTRO_TEXT_KEY}${locale}`;
-    const storedIntro = localStorage.getItem(currentLocaleIntroKey);
-    if (!storedIntro || storedIntro.trim() === "") {
-       setIntroParagraph(defaultHomeIntroParagraph);
-    }
-  }, [defaultHomeTitle, defaultHomeDescription, defaultHomeIntroParagraph, locale]);
-
+  if (isLoadingTexts) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-15rem)] py-12">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-4 text-muted-foreground">{t('home.loadingContent')}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-15rem)] py-12">
@@ -102,5 +93,3 @@ export default function HomePage() {
     </div>
   );
 }
-
-    

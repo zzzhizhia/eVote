@@ -17,10 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from '@/components/ui/button';
 
-const POLLS_STORAGE_KEY = 'eVote_polls_list';
-const RESULTS_VISIBILITY_KEY = 'eVote_isResultsPublic';
+const POLLS_STORAGE_KEY = 'eVote_polls_list'; // Polls remain in localStorage for this iteration
 
 interface ChartData {
   name: string;
@@ -36,7 +34,8 @@ export default function ResultsPage() {
 
   const [allPolls, setAllPolls] = useState<Poll[]>([]);
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // General loading for page data
+  const [isLoadingVisibility, setIsLoadingVisibility] = useState(true); // Specific for visibility check
   const [totalVotes, setTotalVotes] = useState(0);
   const [winner, setWinner] = useState<PollCandidate | null>(null);
   const [canViewResults, setCanViewResults] = useState(false);
@@ -44,28 +43,48 @@ export default function ResultsPage() {
   
   const targetPollId = searchParams.get('pollId');
 
-  useEffect(() => {
-    setIsLoading(true);
-    let adminStatus = false;
-    let publicVisibility = false;
-
+  const fetchResultsVisibility = useCallback(async () => {
+    setIsLoadingVisibility(true);
     try {
-      adminStatus = localStorage.getItem('isAdminAuthenticated') === 'true';
-      const storedVisibility = localStorage.getItem(RESULTS_VISIBILITY_KEY);
-      publicVisibility = storedVisibility ? JSON.parse(storedVisibility) : false;
-      setCanViewResults(adminStatus || publicVisibility); 
+      const adminAuth = localStorage.getItem('isAdminAuthenticated') === 'true';
+      if (adminAuth) {
+        setCanViewResults(true);
+        setIsLoadingVisibility(false);
+        return;
+      }
+      const response = await fetch('/api/results-visibility');
+      if (!response.ok) throw new Error('Failed to fetch visibility status');
+      const data = await response.json();
+      setCanViewResults(data.isPublic);
+    } catch (error) {
+      console.error("Error fetching results visibility:", error);
+      setCanViewResults(false); // Default to private on error
+    }
+    setIsLoadingVisibility(false);
+  }, []);
 
+  useEffect(() => {
+    fetchResultsVisibility();
+  }, [fetchResultsVisibility]);
+
+
+  useEffect(() => {
+    // This effect depends on canViewResults, which is set by fetchResultsVisibility
+    if (isLoadingVisibility) return; // Don't load polls until visibility check is done
+
+    setIsLoading(true);
+    try {
       const storedPollsRaw = localStorage.getItem(POLLS_STORAGE_KEY);
       if (storedPollsRaw) {
         const storedPolls: Poll[] = JSON.parse(storedPollsRaw);
-        setAllPolls(storedPolls.sort((a, b) => (b.id > a.id ? 1 : -1))); // Sort by creation time, newest first
+        setAllPolls(storedPolls.sort((a, b) => (b.id > a.id ? 1 : -1))); 
         
         let pollToDisplay: Poll | null = null;
 
         if (targetPollId) {
           pollToDisplay = storedPolls.find(p => p.id === targetPollId) || null;
         } else if (storedPolls.length > 0) {
-          pollToDisplay = storedPolls[0]; // Default to the most recent poll
+          pollToDisplay = storedPolls[0]; 
         }
         
         setActivePoll(pollToDisplay);
@@ -83,7 +102,7 @@ export default function ResultsPage() {
               if (voteCount > maxVotes) {
                 maxVotes = voteCount;
                 currentWinnerId = candidateId;
-              } else if (voteCount === maxVotes && maxVotes > 0) { // Ensure tie is only if votes are cast
+              } else if (voteCount === maxVotes && maxVotes > 0) { 
                 currentWinnerId = null; 
               }
             }
@@ -104,14 +123,14 @@ export default function ResultsPage() {
         setPollTitleForDisplay(t('resultsPage.noPollsAvailable'));
       }
     } catch (error) {
-      console.error("Error loading data from localStorage:", error);
+      console.error("Error loading poll data from localStorage:", error);
       setAllPolls([]);
       setActivePoll(null);
       setPollTitleForDisplay(t('resultsPage.errorLoadingPoll'));
     }
     
     setIsLoading(false);
-  }, [targetPollId, t]);
+  }, [targetPollId, t, isLoadingVisibility]); // Added isLoadingVisibility dependency
 
   const chartData: ChartData[] = useMemo(() => {
     if (!activePoll || !activePoll.votes || !canViewResults) return [];
@@ -125,11 +144,11 @@ export default function ResultsPage() {
     if (pollId) {
       router.push(`/results?pollId=${pollId}`);
     } else {
-      router.push('/results'); // Go to default results if "select poll" is chosen
+      router.push('/results'); 
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isLoadingVisibility) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-10">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -319,4 +338,3 @@ export default function ResultsPage() {
     </div>
   );
 }
-
