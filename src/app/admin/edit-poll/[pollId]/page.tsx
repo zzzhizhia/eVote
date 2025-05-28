@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, Edit3, AlertTriangle, CalendarClock, ToggleLeft, ToggleRight } from 'lucide-react';
+import { PlusCircle, Trash2, Edit3, AlertTriangle, CalendarClock, ToggleLeft, ToggleRight, UserCheck, Users } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll, PollCandidate } from '@/lib/types';
@@ -30,6 +30,8 @@ export default function EditPollPage() {
   const [candidates, setCandidates] = useState<PollCandidate[]>([]);
   const [isOpen, setIsOpen] = useState(true);
   const [scheduledCloseTime, setScheduledCloseTime] = useState<string>('');
+  const [voteLimitEnabled, setVoteLimitEnabled] = useState(false);
+  const [maxVotesPerClient, setMaxVotesPerClient] = useState(1);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingPoll, setIsFetchingPoll] = useState(true);
@@ -54,8 +56,9 @@ export default function EditPollPage() {
           setPollTitle(pollToEdit.title);
           setCandidates(pollToEdit.candidates.map(c => ({...c})));
           setIsOpen(pollToEdit.isOpen);
-          // Format for datetime-local input which expects 'yyyy-MM-ddTHH:mm'
           setScheduledCloseTime(pollToEdit.scheduledCloseTime ? format(new Date(pollToEdit.scheduledCloseTime), "yyyy-MM-dd'T'HH:mm") : '');
+          setVoteLimitEnabled(pollToEdit.voteLimitEnabled || false);
+          setMaxVotesPerClient(pollToEdit.maxVotesPerClient || 1);
         } else {
           toast({
             title: "Poll Not Found",
@@ -161,6 +164,14 @@ export default function EditPollPage() {
       toast({ title: "Not Enough Candidates", description: "A poll must have at least two candidates.", variant: "destructive" });
       return;
     }
+     if (voteLimitEnabled && maxVotesPerClient < 1) {
+      toast({
+        title: "Invalid Vote Limit",
+        description: "Max votes per client must be at least 1 if vote limiting is enabled.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!originalPoll) {
          toast({ title: "Error Saving Poll", description: "Original poll data not found. Cannot update.", variant: "destructive" });
         return;
@@ -174,6 +185,8 @@ export default function EditPollPage() {
       candidates,
       isOpen,
       scheduledCloseTime: scheduledCloseTime ? new Date(scheduledCloseTime).toISOString() : null,
+      voteLimitEnabled,
+      maxVotesPerClient: voteLimitEnabled ? maxVotesPerClient : undefined,
       votes: originalPoll.votes || {}, 
     };
 
@@ -253,11 +266,11 @@ export default function EditPollPage() {
               <Input id="pollTitle" type="text" value={pollTitle} onChange={(e) => setPollTitle(e.target.value)} placeholder="e.g., Favorite Programming Language" className="text-base" required />
             </div>
 
-            <div className="space-y-3 border p-4 rounded-md">
+            <div className="space-y-3 border p-4 rounded-md shadow-sm">
               <Label className="text-base font-medium">Poll Settings</Label>
               <div className="flex items-center space-x-3">
                 {isOpen ? <ToggleRight className="h-6 w-6 text-green-500" /> : <ToggleLeft className="h-6 w-6 text-red-500" />}
-                <Label htmlFor="pollStatusSwitch" className="text-sm">
+                <Label htmlFor="pollStatusSwitch" className="text-sm flex-grow">
                   Poll Status: {isOpen ? 'Open' : 'Closed'}
                 </Label>
                 <Switch id="pollStatusSwitch" checked={isOpen} onCheckedChange={setIsOpen} aria-label={`Toggle poll status, currently ${isOpen ? 'open' : 'closed'}`} />
@@ -272,6 +285,32 @@ export default function EditPollPage() {
                     <p className="text-xs text-destructive">Warning: Scheduled time is in the past. Poll will close on save if still open.</p>
                 )}
               </div>
+               <div className="flex items-center space-x-3 pt-2">
+                {voteLimitEnabled ? <UserCheck className="h-5 w-5 text-green-500" /> : <Users className="h-5 w-5 text-muted-foreground" />}
+                <Label htmlFor="voteLimitSwitch" className="text-sm flex-grow">
+                  Limit Votes Per Client
+                </Label>
+                <Switch
+                  id="voteLimitSwitch"
+                  checked={voteLimitEnabled}
+                  onCheckedChange={setVoteLimitEnabled}
+                  aria-label="Toggle vote limit per client"
+                />
+              </div>
+              {voteLimitEnabled && (
+                <div className="space-y-1 pl-8">
+                  <Label htmlFor="maxVotesPerClient" className="text-xs text-muted-foreground">Max Votes Per Client</Label>
+                  <Input
+                    id="maxVotesPerClient"
+                    type="number"
+                    value={maxVotesPerClient}
+                    onChange={(e) => setMaxVotesPerClient(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    min="1"
+                    className="text-sm h-8 w-24"
+                  />
+                  <p className="text-xs text-muted-foreground">Client limits are browser-based and can be bypassed.</p>
+                </div>
+              )}
             </div>
 
 

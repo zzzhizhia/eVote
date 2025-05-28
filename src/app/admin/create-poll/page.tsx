@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, ListPlus, CalendarClock } from 'lucide-react';
+import { PlusCircle, Trash2, ListPlus, CalendarClock, UserCheck, Users } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from "@/hooks/use-toast";
 import type { Poll, PollCandidate } from '@/lib/types';
 import Image from 'next/image';
@@ -24,6 +25,8 @@ export default function CreatePollPage() {
   const [currentCandidateAvatarPreview, setCurrentCandidateAvatarPreview] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<PollCandidate[]>([]);
   const [scheduledCloseTime, setScheduledCloseTime] = useState<string>('');
+  const [voteLimitEnabled, setVoteLimitEnabled] = useState(false);
+  const [maxVotesPerClient, setMaxVotesPerClient] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -118,6 +121,14 @@ export default function CreatePollPage() {
       });
       return;
     }
+    if (voteLimitEnabled && maxVotesPerClient < 1) {
+      toast({
+        title: "Invalid Vote Limit",
+        description: "Max votes per client must be at least 1 if vote limiting is enabled.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsLoading(true);
 
@@ -128,6 +139,8 @@ export default function CreatePollPage() {
       votes: {},
       isOpen: true, // Polls are open by default when created
       scheduledCloseTime: scheduledCloseTime ? new Date(scheduledCloseTime).toISOString() : null,
+      voteLimitEnabled,
+      maxVotesPerClient: voteLimitEnabled ? maxVotesPerClient : undefined,
     };
 
     try {
@@ -142,6 +155,8 @@ export default function CreatePollPage() {
       setPollTitle('');
       setCandidates([]);
       setScheduledCloseTime('');
+      setVoteLimitEnabled(false);
+      setMaxVotesPerClient(1);
       router.push('/admin/dashboard');
     } catch (error) {
       console.error("Failed to save poll:", error);
@@ -178,18 +193,48 @@ export default function CreatePollPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="scheduledCloseTime" className="text-base flex items-center gap-2">
-                <CalendarClock className="h-5 w-5" /> Optional: Schedule Close Time
-              </Label>
-              <Input
-                id="scheduledCloseTime"
-                type="datetime-local"
-                value={scheduledCloseTime}
-                onChange={(e) => setScheduledCloseTime(e.target.value)}
-                className="text-base"
-              />
-               <p className="text-xs text-muted-foreground">Leave blank if you want to close the poll manually.</p>
+            <div className="space-y-3 border p-4 rounded-md shadow-sm">
+              <Label className="text-base font-medium">Poll Settings</Label>
+              <div className="space-y-2">
+                <Label htmlFor="scheduledCloseTime" className="text-sm flex items-center gap-2">
+                  <CalendarClock className="h-5 w-5" /> Optional: Schedule Close Time
+                </Label>
+                <Input
+                  id="scheduledCloseTime"
+                  type="datetime-local"
+                  value={scheduledCloseTime}
+                  onChange={(e) => setScheduledCloseTime(e.target.value)}
+                  className="text-base"
+                />
+                <p className="text-xs text-muted-foreground">Leave blank if you want to close the poll manually.</p>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-2">
+                {voteLimitEnabled ? <UserCheck className="h-5 w-5 text-green-500" /> : <Users className="h-5 w-5 text-muted-foreground" />}
+                <Label htmlFor="voteLimitSwitch" className="text-sm flex-grow">
+                  Limit Votes Per Client
+                </Label>
+                <Switch
+                  id="voteLimitSwitch"
+                  checked={voteLimitEnabled}
+                  onCheckedChange={setVoteLimitEnabled}
+                  aria-label="Toggle vote limit per client"
+                />
+              </div>
+              {voteLimitEnabled && (
+                <div className="space-y-1 pl-8">
+                  <Label htmlFor="maxVotesPerClient" className="text-xs text-muted-foreground">Max Votes Per Client</Label>
+                  <Input
+                    id="maxVotesPerClient"
+                    type="number"
+                    value={maxVotesPerClient}
+                    onChange={(e) => setMaxVotesPerClient(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    min="1"
+                    className="text-sm h-8 w-24"
+                  />
+                   <p className="text-xs text-muted-foreground">Client limits are browser-based and can be bypassed.</p>
+                </div>
+              )}
             </div>
 
 

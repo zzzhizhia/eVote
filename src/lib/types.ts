@@ -28,5 +28,7 @@ export interface Poll {
   votes: { [candidateId: string]: number }; // Stores vote counts for this poll
   isOpen: boolean; // true if poll is open for voting, false otherwise
   scheduledCloseTime?: string | null; // ISO string for scheduled closing time
+  voteLimitEnabled?: boolean; // Whether to limit votes per client
+  maxVotesPerClient?: number; // Max votes allowed per client if limit is enabled
 }
 
