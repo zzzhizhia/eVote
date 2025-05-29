@@ -45,7 +45,7 @@ export default function CandidateCard({ candidate, onSelect, isSelected, disable
       aria-disabled={disabled}
       aria-label={ariaLabel}
     >
-      <div className="relative w-32 h-32 md:w-40 md:h-40 mb-3">
+      <div className="relative w-[160px] h-[160px] mb-3" style={{ width: '160px', height: '160px' }}>
         <Image
           src={candidate.avatarUrl}
           alt={t('candidateCard.selectCandidateAriaLabel', { candidateName: candidate.name })} // Alt text can also be translated
@@ -53,6 +53,7 @@ export default function CandidateCard({ candidate, onSelect, isSelected, disable
           height={160}
           className={cn("rounded-full object-cover border-4", isSelected && !disabled ? "border-primary/70" : "border-muted" )}
           data-ai-hint={candidate.dataAiHint}
+          style={{ width: '160px', height: '160px', objectFit: 'cover', borderRadius: '9999px' }}
         />
         {isSelected && !disabled && (
           <div className="absolute bottom-1 right-1 bg-primary rounded-full p-1.5 text-primary-foreground shadow-md">
