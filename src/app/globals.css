@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%; /* Light background */
+    --background: 0 50% 98.6%; /* #fbf8f8 */
     --foreground: 240 10% 3.9%; /* Dark foreground */
 
     --card: 0 0% 100%;
@@ -14,7 +14,7 @@
     --popover-foreground: 240 10% 3.9%;
 
     --primary: 32 100% 50%; /* Orange #FF8600 */
-    --primary-foreground: 20 14.3% 4.1%; /* Dark for contrast on Orange */
+    --primary-foreground: 0 0% 98%; /* White text for primary buttons */
 
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
@@ -61,7 +61,7 @@
     --popover-foreground: 0 0% 98%;
 
     --primary: 32 100% 50%; /* Orange #FF8600 */
-    --primary-foreground: 20 14.3% 4.1%; /* Dark for contrast on Orange */
+    --primary-foreground: 0 0% 98%; /* White text for primary buttons */
 
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
