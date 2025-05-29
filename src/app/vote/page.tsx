@@ -52,7 +52,7 @@ const saveClientPollVote = (pollId: string) => {
 
 export default function VotePage() {
   const { t, locale } = useLanguage(); 
-  const defaultVotePageIntroText = t('votePage.defaultIntro'); 
+  const defaultVotePageIntroText = useMemo(() => t('votePage.defaultIntro'), [t]);
 
   const [allPolls, setAllPolls] = useState<Poll[]>([]);
   const [selectedPoll, setSelectedPoll] = useState<Poll | null>(null);
@@ -66,52 +66,101 @@ export default function VotePage() {
   const loadPageData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch custom texts
       const settingsRes = await fetch('/api/settings');
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
         const currentLocaleCustomTexts: CustomTextsForLocale = settingsData.customTexts?.[locale] || {};
         setIntroText(currentLocaleCustomTexts.votePageIntroText || defaultVotePageIntroText);
       } else {
+        let errorDetails = `Status: ${settingsRes.status}`;
+        try {
+          const errorData = await settingsRes.json();
+          errorDetails += `, Message: ${errorData.message || 'Unknown server error'}`;
+        } catch (e) { 
+          try { const textError = await settingsRes.text(); errorDetails += `, Body: ${textError.substring(0,200)}`; } catch (textE) {/*ignore*/}
+        }
+        console.error("Error fetching settings for vote page:", errorDetails);
         setIntroText(defaultVotePageIntroText);
       }
 
-      // Fetch polls
       const pollsRes = await fetch('/api/polls');
-      if (!pollsRes.ok) throw new Error('Failed to fetch polls');
+      if (!pollsRes.ok) {
+          let errorDetails = `Failed to fetch polls. Status: ${pollsRes.status}`;
+          try {
+              const errorData = await pollsRes.json();
+              errorDetails += `, Message: ${errorData.message || 'Unknown server error'}`;
+          } catch(e) { /* ignore if response is not json */ }
+          throw new Error(errorDetails);
+      }
       let fetchedPolls: Poll[] = await pollsRes.json();
       
       const upToDatePolls = fetchedPolls.map(checkPollStatusClient);
       setAllPolls(upToDatePolls);
       setClientVotes(getClientPollVotes());
 
-      // Auto-select poll if only one exists or if selectedPoll was closed
-      if (upToDatePolls.length === 1 && !selectedPoll) { 
-        setSelectedPoll(upToDatePolls[0]);
-      } else if (upToDatePolls.length === 0) {
-        setSelectedPoll(null);
-      } else if (selectedPoll) {
-          const refreshedSelectedPoll = upToDatePolls.find(p => p.id === selectedPoll.id);
-          if (refreshedSelectedPoll) {
-              setSelectedPoll(refreshedSelectedPoll);
-          } else {
-              setSelectedPoll(null); // Selected poll might have been deleted
-          }
-      }
-
     } catch (error) {
       console.error("Error loading vote page data:", error);
-      setAllPolls([]);
-      setSelectedPoll(null);
-      setIntroText(defaultVotePageIntroText);
-      toast({ title: t('toast.errorLoadingData'), description: t('toast.errorLoadingDataDescription'), variant: "destructive" });
+      setAllPolls([]); // Clear polls on error
+      setIntroText(defaultVotePageIntroText); // Reset intro text
+      toast({ title: t('toast.errorLoadingData'), description: (error as Error).message || t('toast.errorLoadingDataDescription'), variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }, [locale, defaultVotePageIntroText, selectedPoll, t, toast]); 
+  }, [locale, defaultVotePageIntroText, t, toast]); // Removed selectedPoll from dependencies
 
   useEffect(() => {
     loadPageData();
   }, [loadPageData]); 
+
+  // Effect to manage selectedPoll based on allPolls and isLoading state
+  useEffect(() => {
+    // Wait for initial data load to complete before trying to manage selectedPoll
+    if (isLoading) {
+      return;
+    }
+
+    if (allPolls.length === 0) {
+      if (selectedPoll !== null) { // Only update if state needs to change
+        setSelectedPoll(null);
+        setSelectedCandidateIds([]);
+      }
+      return;
+    }
+
+    // If a poll is already selected by the user, try to find its updated version in allPolls
+    if (selectedPoll) {
+      const currentSelectedPollInList = allPolls.find(p => p.id === selectedPoll.id);
+      if (currentSelectedPollInList) {
+        // Update to the new reference from allPolls ONLY if data has meaningfully changed (e.g., status)
+        // This helps prevent unnecessary re-renders if only the array reference changed but poll data is same.
+        // A more robust check might compare more fields or use a library for deep comparison if needed.
+        if (selectedPoll.isOpen !== currentSelectedPollInList.isOpen || 
+            JSON.stringify(selectedPoll.candidates) !== JSON.stringify(currentSelectedPollInList.candidates) ||
+            selectedPoll.title !== currentSelectedPollInList.title) {
+           setSelectedPoll(currentSelectedPollInList);
+        }
+        return; // Valid selection exists, no further auto-selection needed
+      }
+      // If selectedPoll.id is not in allPolls (e.g. deleted), fall through to select a default or null
+    }
+    
+    // Auto-selection logic: If no poll is selected OR the selected poll became invalid
+    if (allPolls.length === 1) {
+      // If only one poll exists, auto-select it if no poll is currently selected or if the current selection is invalid
+      if (!selectedPoll || !allPolls.find(p => p.id === selectedPoll.id)) {
+        setSelectedPoll(allPolls[0]);
+        setSelectedCandidateIds([]); 
+      }
+    } else {
+      // Multiple polls, or a selected poll became invalid and there isn't a single poll to default to.
+      // This ensures user is taken to poll list if their current selection is gone.
+      if (selectedPoll && !allPolls.find(p => p.id === selectedPoll.id)) {
+        setSelectedPoll(null);
+        setSelectedCandidateIds([]);
+      }
+      // If selectedPoll is already null and allPolls.length > 1, nothing to do here, user will see list.
+    }
+  }, [allPolls, isLoading, selectedPoll]); // selectedPoll is needed to react to its invalidation or user selection
 
   const handleSelectCandidate = (candidateId: string) => {
     if (!selectedPoll) return;
@@ -148,10 +197,10 @@ export default function VotePage() {
       return;
     }
     
-    // Re-check poll status before submitting
     const currentPollState = checkPollStatusClient(selectedPoll);
     if (!currentPollState.isOpen) {
       toast({ title: t('toast.pollClosed'), description: t('toast.pollClosedDescription'), variant: "destructive" });
+      setAllPolls(prevPolls => prevPolls.map(p => p.id === currentPollState.id ? currentPollState : p)); // Refresh allPolls
       setSelectedPoll(currentPollState); // Update UI if status changed
       return;
     }
@@ -181,7 +230,7 @@ export default function VotePage() {
         const errorData = await response.json();
         if (response.status === 403 && errorData.message === 'Poll is closed') {
             toast({ title: t('toast.pollJustClosed'), description: t('toast.pollJustClosedDescription'), variant: "destructive" });
-            loadPageData(); // Refresh poll data
+            loadPageData(); 
             return;
         }
         throw new Error(errorData.message || 'Failed to submit vote');
@@ -220,7 +269,7 @@ export default function VotePage() {
     );
   }
 
-  if (allPolls.length === 0) {
+  if (allPolls.length === 0 && !isLoading) { // Ensure not to show "No Active Polls" while still loading
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-20rem)] py-12">
         <Card className="w-full max-w-lg text-center shadow-lg">
@@ -242,7 +291,7 @@ export default function VotePage() {
           <CardHeader><CardTitle className="text-2xl flex items-center gap-2"><ListChecks /> {t('votePage.availablePollsTitle')}</CardTitle><CardDescription>{t('votePage.availablePollsDescription')}</CardDescription></CardHeader>
           <CardContent className="space-y-3">
             {allPolls.map(poll => {
-                const currentPollChecked = checkPollStatusClient(poll); // Ensure status is up-to-date for display
+                const currentPollChecked = checkPollStatusClient(poll); 
                 let statusTextKey = currentPollChecked.isOpen ? 'votePage.pollList.statusOpen' : 'votePage.pollList.statusClosed';
                 let statusColor = currentPollChecked.isOpen ? 'text-green-600' : 'text-red-600';
                 let StatusIcon = currentPollChecked.isOpen ? Unlock : Lock;
@@ -253,7 +302,7 @@ export default function VotePage() {
                      if (new Date() < closeTime) {
                         statusTextKey = 'votePage.pollList.statusOpenUntil';
                         statusTextParam = { time: format(closeTime, 'MMM d, p') };
-                     } else { // Should have been caught by checkPollStatusClient, but as a fallback
+                     } else { 
                         statusTextKey = 'votePage.pollList.statusClosed'; 
                         StatusIcon = Lock; statusColor = 'text-red-600';
                      }
@@ -425,3 +474,5 @@ export default function VotePage() {
     </div>
   );
 }
+
+    
