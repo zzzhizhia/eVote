@@ -21,12 +21,13 @@ export default function TickerTape({ candidates }: TickerTapeProps) {
       <div className="ticker-tape-container whitespace-nowrap">
         <div className="ticker-tape-content flex animate-marquee motion-safe:animate-marquee hover:pause">
           {displayCandidates.map((candidate, index) => (
-            <div key={`${candidate.id}-${index}`} className="inline-flex flex-col items-center mx-3 w-[160px]">
+            <div key={`${candidate.id}-${index}`} className="inline-flex flex-col items-center mx-3 w-24">
               <Image
                 src={candidate.avatarUrl}
                 alt={candidate.name}
-                width={160}
-                height={160}
+                width={64}
+                height={64}
+ style={{ borderRadius: '9999px' }}
                 className="rounded-full object-cover border-2 border-primary"
                 data-ai-hint={candidate.dataAiHint}
               />
