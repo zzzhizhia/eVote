@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine, ListChecks, Edit3, Trash2, Clock, ToggleLeft, ToggleRight, CheckCircle, XCircle, FileText, MessageSquareText, Loader2, LogOut } from 'lucide-react';
+import { PlusCircle, Settings, Eye, EyeOff, AlertTriangle, Save, PencilLine, ListChecks, Edit3, Trash2, Clock, CheckCircle, XCircle, FileText, MessageSquareText, Loader2, LogOut } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -135,12 +135,10 @@ export default function AdminDashboardPage() {
     } catch (error) {
       console.error("Error fetching admin data:", error);
       toast({ title: t('toast.errorLoadingData'), description: (error as Error).message || t('toast.errorLoadingDataDescription'), variant: "destructive" });
-      // Avoid pushing to /admin if already on an admin sub-page to prevent loops if /api/user fails temporarily
-      // router.push('/admin'); 
     } finally {
       setIsAuthLoading(false);
     }
-  }, [router, toast, t, locale, defaultLocalizedTexts]); // Removed loadPolls from here, called separately
+  }, [router, toast, t, locale, defaultLocalizedTexts]); 
 
   useEffect(() => {
     fetchAdminStatusAndData();
@@ -170,11 +168,16 @@ export default function AdminDashboardPage() {
       if (wasChanged) {
         for (const poll of updatedPolls) {
           if (!poll.isOpen && fetchedPolls.find(p => p.id === poll.id)?.isOpen) {
-            await fetch(`/api/polls/${poll.id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(poll),
-            });
+            // Find the original poll to get its full data for the PUT request
+            const originalPoll = fetchedPolls.find(p => p.id === poll.id);
+            if (originalPoll) {
+                const pollToClose = { ...originalPoll, isOpen: false };
+                 await fetch(`/api/polls/${poll.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(pollToClose), 
+                 });
+            }
           }
         }
       }
@@ -186,26 +189,43 @@ export default function AdminDashboardPage() {
     setIsLoadingPolls(false);
   };
   
-  const handleTogglePollStatus = async (poll: Poll, currentStatus: boolean) => {
-    const updatedPoll = { ...poll, isOpen: !currentStatus };
+  const handleTogglePollStatus = async (pollToToggle: Poll, newIsOpenState: boolean) => {
+    const originalPolls = [...polls]; // Shallow copy for rollback
+    const optimisticUpdatedPoll = { ...pollToToggle, isOpen: newIsOpenState };
+
+    // Optimistic UI update
+    setPolls(prevPolls =>
+      prevPolls.map(p => (p.id === pollToToggle.id ? optimisticUpdatedPoll : p))
+    );
+
     try {
-      const res = await fetch(`/api/polls/${poll.id}`, {
+      const res = await fetch(`/api/polls/${pollToToggle.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedPoll),
+        // Send the full poll object with the updated isOpen status
+        body: JSON.stringify(optimisticUpdatedPoll),
       });
-      if (!res.ok) throw new Error('Failed to update poll status');
+
+      if (!res.ok) {
+        setPolls(originalPolls); // Rollback UI on API error
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to update poll status on server');
+      }
       
-      setPolls(prevPolls => prevPolls.map(p => (p.id === poll.id ? updatedPoll : p)));
+      // API call was successful, data is already reflected optimistically
       toast({
-        title: !currentStatus ? t('toast.pollStatusOpened') : t('toast.pollStatusClosed'),
-        description: t('toast.pollStatusChangedDescription', { status: !currentStatus ? t('toast.pollStatus.acceptingVotes') : t('toast.pollStatus.closedForVoting')}),
+        title: newIsOpenState ? t('toast.pollStatusOpened') : t('toast.pollStatusClosed'),
+        description: t('toast.pollStatusChangedDescription', { status: newIsOpenState ? t('toast.pollStatus.acceptingVotes') : t('toast.pollStatus.closedForVoting')}),
       });
     } catch (error) {
+      // Ensure rollback if not already done (e.g. network error before res.ok check)
+      // or if error occurred after a potential partial success (though less likely here)
+      setPolls(originalPolls); 
       console.error("Error toggling poll status:", error);
       toast({ title: t('toast.errorUpdatingPoll'), description: (error as Error).message || t('toast.errorUpdatingPollDescription'), variant: "destructive" });
     }
   };
+
 
   const handleResultsVisibilityToggle = async (checked: boolean) => {
     setIsSavingVisibility(true);
@@ -361,7 +381,7 @@ export default function AdminDashboardPage() {
                         <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
                           <Switch 
                             checked={poll.isOpen} 
-                            onCheckedChange={() => handleTogglePollStatus(poll, poll.isOpen)}
+                            onCheckedChange={(newCheckedState) => handleTogglePollStatus(poll, newCheckedState)}
                             aria-label={t('admin.dashboard.togglePollStatusAriaLabel', { pollTitle: poll.title })}
                             className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
                           />

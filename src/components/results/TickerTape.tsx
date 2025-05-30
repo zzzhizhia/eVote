@@ -27,7 +27,7 @@ export default function TickerTape({ candidates }: TickerTapeProps) {
                 alt={candidate.name}
                 width={64}
                 height={64}
- style={{ borderRadius: '9999px' }}
+                style={{ borderRadius: '9999px' }}
                 className="rounded-full object-cover border-2 border-primary"
                 data-ai-hint={candidate.dataAiHint}
               />
